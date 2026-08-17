@@ -4,7 +4,7 @@
 
 
 <div style="margin-top:50px; margin-left: 12%;">
-  <h1 style="font-size: 30px; margin: 0;"> Guaranteed Guess: A Language Modeling Approach for CISC-to-RISC Transpilation with Testing Guarantees [EMNLP 2025 🔥]</h1>
+  <h1 style="font-size: 30px; margin: 0;"> Guaranteed Guess: A Language Modeling Approach for CISC-to-RISC Transpilation with Testing Guarantees</h1>
 </div>
 
 <div align="left" style="margin:24px 0;">
@@ -262,10 +262,10 @@ Here are all the available GG models:
 If you use this code or the dataset in your research, please cite our paper:
 
 ```bibtex
-@article{heakl2025guaranteed,
+@inproceedings{heakl2025guaranteed,
   title={Guaranteed Guess: A Language Modeling Approach for CISC-to-RISC Transpilation with Testing Guarantees},
   author={Heakl, Ahmed and Hashmi, Sarim and Abi, Chaimaa and Lee, Celine and Mahmoud, Abdulrahman},
-  journal={arXiv preprint arXiv:2506.14606},
-  year={2025}
+  year={2025},
+  organization={Association for Computational Linguistics (ACL)}
 }
 ```

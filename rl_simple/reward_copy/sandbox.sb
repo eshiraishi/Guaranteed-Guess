@@ -1,0 +1,8 @@
+(version 1)
+; Sandbox for executing model-generated binaries in the reward harness.
+; Everything is allowed except network access and writes outside the job dir.
+(allow default)
+(deny network*)
+(deny file-write*)
+(allow file-write* (subpath (param "WORKDIR")) (literal "/dev/null") (literal "/dev/stdout") (literal "/dev/stderr"))
+(deny process-fork)

@@ -1,0 +1,61 @@
+# TRL's own config for `trl grpo --config grpo.yaml` (TrlParser: GRPOConfig + ModelConfig + dataset mixture).
+# QLoRA is the same file plus: --load_in_4bit true --bnb_4bit_quant_type nf4 --run_name qlora --output_dir runs/qlora
+# TODO values are undecided on purpose: TRL refuses to start instead of silently using a library default.
+env:
+  TRACKIO_DIR: runs/trackio
+
+# Model
+model_name_or_path: ahmedheakl/gg-armv8-O2
+model_revision: 0444a378f384300187c7f43914fc986a81ff051a
+dtype: bfloat16
+
+# Data and reward
+datasets:
+  - path: json
+    data_files: data/train.jsonl        # written by `python -m ggrpo.data` (config.toml data.train)
+    columns: [prompt, task_id]
+reward_funcs: [ggrpo.reward.reward_pass]
+
+# LoRA
+use_peft: true
+lora_target_modules: all-linear
+lora_r: TODO
+lora_alpha: TODO
+lora_dropout: TODO
+
+# GRPO
+num_generations: 8
+loss_type: TODO                         # grpo vs dapo (TRL default: dapo)
+beta: 0.0
+learning_rate: TODO
+max_steps: TODO
+per_device_train_batch_size: TODO
+gradient_accumulation_steps: TODO
+max_completion_length: TODO
+mask_truncated_completions: true
+
+# Sampling, explicit so nothing comes from the checkpoint's generation_config.json; config.toml [generate.sample] matches
+temperature: 1.0
+top_k: 0
+top_p: 1.0
+repetition_penalty: 1.0
+
+# Generation backend
+use_vllm: true
+vllm_mode: colocate
+
+# Precision and memory
+bf16: true
+gradient_checkpointing: true
+
+# Tracking (Trackio, local only: no Space, no Bucket)
+seed: 0
+report_to: [trackio]
+project: cs8001
+run_name: lora
+trackio_space_id: null
+trackio_static_space_id: false
+output_dir: runs/lora
+logging_steps: 1
+log_completions: true
+save_steps: 25

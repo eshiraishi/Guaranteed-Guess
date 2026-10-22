@@ -1,0 +1,85 @@
+# All ggrpo settings. Paths are relative to this directory, where every command runs.
+# Override any key from the command line: --section.key value (e.g. --generate.mode sample).
+
+[data]
+mbpp = "data/raw/mbpp_armv8_O2_ventura.parquet"
+humaneval = "data/raw/gg-bench-armv8-O2.parquet"         # HF ahmedheakl/gg-bench-armv8-O2 @ 32a82dd9 (x86, arm, file)
+humaneval_tests = "data/raw/asmbench_source.parquet"     # HF ahmedheakl/asmbench_source @ 89bca970 (file, code, test)
+step0_predictions = "data/raw/step0_preds_beam8_16k.jsonl"   # ponyo, beam 8, 16000-token cap
+# train_ids = "data/train_ids.txt"    # vetted subset (whitespace-separated task ids); unset = all valid MBPP-C
+train = "data/train.jsonl"            # also named in grpo.yaml (TRL owns that file)
+eval = "data/eval.jsonl"
+
+[prompt]   # eval/eval_huamaneval.py, verbatim
+template = "Convert the following x86 assembly code to ARM assembly:\n```x86asm\n{}\n```"
+# Rust regex (polars), group 1 == raw.split("```armasm\n")[-1].split("```")[0]; checked by tests/test_extract.py
+extract = '(?s)(?:.*```armasm\n)?(.*?)(?:```|$)'
+
+[server]
+host = "0.0.0.0"
+port = 8765
+workers = 8
+url = "http://127.0.0.1:8765/score"   # as seen from totoro, through the SSH tunnel
+
+[harness]
+cc = ["clang", "-arch", "arm64", "-w"]
+asm = ["clang", "-arch", "arm64", "-c", "-x", "assembler"]
+ldflags = ["-lm"]
+sandbox = "sandbox.sb"
+cache = ".cache/drivers"
+build_timeout = 30
+run_timeout = 10
+cpu_seconds = 5
+max_file_bytes = 16777216
+stderr_tail = 600
+
+[generate]
+model = "ahmedheakl/gg-armv8-O2"
+revision = "0444a378f384300187c7f43914fc986a81ff051a"
+attn_implementation = "sdpa"          # paper eval used flash_attention_2; check it is available on sm_120
+device = "cuda"
+max_total_tokens = 32000              # paper: max_new_tokens = 32000 - prompt tokens
+mode = "beam_search"
+out = "runs/base/beam_search.jsonl"
+seed = 0
+
+# Decoding is explicit: unset fields come from the checkpoint's generation_config.json
+# (do_sample=true, temperature=0.7, top_k=20, top_p=0.8, repetition_penalty=1.1).
+# The paper's script passes only num_beams=8, so it inherited do_sample=true (beam sampling), while the paper
+# text says sampling was disabled. This mode follows the text and the step-0 run. Open question for the authors.
+# temperature/top_k/top_p only act when do_sample is true, so they are left unset here.
+[generate.beam_search]
+num_beams = 8
+do_sample = false
+repetition_penalty = 1.1
+
+[generate.sample]   # the training distribution: must match temperature/top_k/top_p/repetition_penalty in grpo.yaml
+num_beams = 1
+do_sample = true
+temperature = 1.0
+top_k = 0
+top_p = 1.0
+repetition_penalty = 1.0
+
+[score]
+tasks = "data/eval.jsonl"
+predictions = "runs/base/beam_search.jsonl"
+column = "raw"
+reference = "runs/preflight/eval_ref.jsonl"   # tasks whose reference ARM passes (authors' tests: all 164)
+out = "runs/base/beam_search.scored.jsonl"
+
+[paper]   # python -m ggrpo.paper (uv sync --extra paper): the released eval/eval_huamaneval.py, seeded
+script = "../eval/eval_huamaneval.py"
+seed = 42            # the script sets none; 42 is the usual default (HF Trainer, LLaMA-Factory)
+sample = true        # true: as released (inherits do_sample=true); false: adds do_sample=False (paper text)
+out = "runs/paper/as_released"
+
+[equivalence]   # python -m ggrpo.equivalence: log-probs of fixed completions, per package environment, same GPU
+completions = "data/raw/step0_preds_beam8_16k.jsonl"
+attn_implementation = "flash_attention_2"
+max_tokens = 8192     # prompt + completion; longer sequences are skipped (full-vocabulary logits on a 16 GB GPU)
+out = "runs/equivalence/paper_flash.jsonl"
+reference = "runs/equivalence/paper_flash.jsonl"   # compared against when it exists and differs from out
+
+[log]
+file = "runs/ggrpo.jsonl"

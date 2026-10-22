@@ -1,3 +1,8 @@
+> **Correction (Oct 22, 2026):** these are not errors in GG's release. The C used here came from LLM4Decompile's
+> HumanEval-C, whose problem order differs from GG's for these 6 problems. GG's own sources and tests
+> (HF `ahmedheakl/asmbench_source` @ 89bca970) recompile byte-identically to all 328 official rows, and the official
+> reference ARM passes the authors' tests 164/164. ggrpo now evaluates with the authors' tests.
+
 # The 6 HumanEval-C problems whose asm differs from GG's official data (VM: clang 14.0.3, SDK 13.3)
 
 - humaneval/0: official asm == our compile of the same C with the final `return 0;` changed to `return 10;`

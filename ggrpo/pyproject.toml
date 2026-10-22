@@ -1,0 +1,51 @@
+[project]
+name = "ggrpo"
+version = "0.1.0"
+description = "GRPO + (Q)LoRA on Guaranteed Guess (x86 -> ARMv8 O2) with a test-based reward"
+authors = [
+    { name = "Enzo Shiraishi", email = "enzo.shiraishi@gmail.com" }
+]
+requires-python = "==3.12.*"
+dependencies = [
+    "httpx==0.28.1",
+    "polars==2.0.0",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.16.1",
+    "structlog==26.1.0",
+]
+
+[project.optional-dependencies]
+reward = [
+    "fastapi==0.136.3",
+    "uvicorn==0.54.0",
+]
+train = [
+    "bitsandbytes==0.50.2",
+    "trackio==0.43.0",
+    "trl[peft,vllm]==1.16.0",
+    "vllm==0.31.0",
+]
+paper = [
+    "accelerate==1.5.2",
+    "datasets==3.4.1",
+    "flash-attn ; sys_platform == 'linux'",
+    "tokenizers==0.21.0",
+    "torch==2.6.0",
+    "transformers==4.50.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+]
+
+[tool.uv]
+# paper: the versions on the gg-armv8-O2 model card (to reproduce the paper); train: the modern TRL stack.
+conflicts = [[{ extra = "paper" }, { extra = "train" }]]
+
+[tool.uv.sources]
+flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl" }

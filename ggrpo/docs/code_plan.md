@@ -26,17 +26,16 @@
   (+ flash-attn 2.7.4.post1, accelerate 1.5.2, not documented). It can't run on Blackwell (sm_120 needs CUDA ≥ 12.8).
 - Run A: released `eval/eval_huamaneval.py` after `set_seed(42)` (beam sampling inherited). Run B: same with
   `do_sample=False` (peer session's `greedy_beam`, same env).
-- Modern stack (train extra) vs paper env: log-probs of the step-0 completions (paper+FA2, paper+sdpa, modern+sdpa)
+- Modern stack (train extra) vs paper env: log-probs of the beam-8, 16k-cap completions (paper+FA2, paper+sdpa, modern+sdpa)
   and a full greedy-beam generation compared output-by-output with Run B.
 
 ## Open questions
 1. **Paper decoding (for the authors).** `eval/eval_huamaneval.py` passes only `num_beams=8`. It therefore inherited
    `do_sample=true` (beam sampling with temperature 0.7, top-k 20, top-p 0.8) and `repetition_penalty=1.1`, but the paper
    says sampling was disabled. Which one produced 45.12%? `config.toml [generate.beam_search]` currently follows the
-   paper text and the step-0 run: no sampling, with `repetition_penalty` 1.1.
+   paper text and the beam-8, 16k-cap run: no sampling, with `repetition_penalty` 1.1.
 2. **Attention kernel.** The paper's eval used `flash_attention_2`; we use `sdpa`. Beam outputs may differ slightly.
    Check whether FA2 is available on sm_120.
 3. **The `TODO` values in `grpo.yaml`:** loss type (grpo vs dapo), LoRA r, alpha and dropout, learning rate, steps,
    batch sizes, and `max_completion_length`.
 4. **Training subset:** `data.train_ids` stays unset until the contradicting samples are sorted out.
-5. **Data build port:** port `step0/vm_build.py` (C → asm in the VM) into the package when the data is rebuilt.

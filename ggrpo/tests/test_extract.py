@@ -16,7 +16,7 @@ def test_extract_matches_paper_split():
         "text\n```",
         "```armasm\n```armasm\n",
         "```armasm\nx\n```\n",
-        *pl.read_ndjson(settings.data.step0_predictions)["raw"].to_list(),
+        *pl.read_ndjson(settings.data.beam8_cap16k)["raw"].to_list(),
     ]
     assert pl.Series(raws).str.extract(settings.prompt.extract, 1).to_list() == [
         raw.split("```armasm\n")[-1].split("```")[0] for raw in raws

@@ -10,7 +10,7 @@ class Data(BaseModel):
     mbpp: Path
     humaneval: Path
     humaneval_tests: Path
-    step0_predictions: Path
+    beam8_cap16k: Path
     train_ids: Path | None = None
     train: Path
     eval: Path
@@ -39,6 +39,15 @@ class Harness(BaseModel):
     cpu_seconds: int
     max_file_bytes: int
     stderr_tail: int
+
+
+class Build(BaseModel):
+    source: Path
+    x86: list[str]
+    arm: list[str]
+    opt: str
+    workers: int
+    out: Path
 
 
 class Decoding(BaseModel):
@@ -98,6 +107,7 @@ class Settings(BaseSettings):
     prompt: Prompt
     server: Server
     harness: Harness
+    build: Build
     generate: Generate
     score: Score
     paper: Paper

@@ -1,5 +1,0 @@
-VM: gg-ventura (tart clone of ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1)
-image digest: sha256:ca83d14f4399a6587e828a18bfe2392f9f61d62692d03781fdd3e0083cafc502
-macOS 13.6 (22G120), arm64
-Apple clang version 14.0.3 (clang-1403.0.22.14.1), Xcode 14.3.1 (14E300c), SDK 13.3
-harness: copy of rl/reward/harness.py + sandbox.sb + include/ (unmodified)

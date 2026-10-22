@@ -9,6 +9,7 @@ assembles, links, and passes the task's tests in a macOS 13 VM with GG's toolcha
 |---|---|
 | `config.toml` | all ggrpo settings and paths; any key can be overridden with `--section.key value` |
 | `grpo.yaml` | TRL config for `trl grpo --config grpo.yaml` (`TODO` values must be decided before a run) |
+| `src/ggrpo/build.py` | builds `data/mbpp_armv8_O2.parquet` in the VM: MBPP-C → x86/arm with GG's commands, validated by the harness |
 | `src/ggrpo/data.py` | builds `data/train.jsonl` (MBPP-C O2) and `data/eval.jsonl` (HumanEval-C O2: GG's bench + the authors' tests) |
 | `src/ggrpo/harness.py` | assemble → link with the C test driver → run sandboxed → verdict |
 | `src/ggrpo/server.py` | FastAPI `POST /score`, runs in the VM |
@@ -17,13 +18,14 @@ assembles, links, and passes the task's tests in a macOS 13 VM with GG's toolcha
 | `src/ggrpo/score.py` | scores a completions file through the server; pass@1 on all and on reference-valid tasks |
 | `src/ggrpo/paper.py` | runs the released `eval/eval_huamaneval.py` (seeded; optionally `do_sample=False`) in the model-card environment |
 | `src/ggrpo/equivalence.py` | log-probs of fixed completions, to compare package environments and attention kernels |
-| `step0/` | the scripts that produced the step-0 toolchain and data results (provenance, not maintained) |
+| `docs/toolchain.md` | VM toolchain, data provenance, and the superseded LLM4Decompile HumanEval findings |
 
 ## Machines and commands (run everything from this directory)
 ```bash
-# VM (macOS 13.6, Xcode 14.3.1, clang 14.0.3, SDK 13.3; see step0/step0_toolchain.txt)
+# VM (macOS 13.6, Xcode 14.3.1, clang 14.0.3, SDK 13.3; see docs/toolchain.md)
 rsync -a --exclude .venv --exclude runs ./ admin@$(tart ip gg-ventura):ggrpo/
 uv sync --extra reward
+uv run python -m ggrpo.build            # only when the MBPP pool changes; data/mbpp_armv8_O2.parquet is tracked
 uv run python -m ggrpo.data
 uv run python -m ggrpo.server
 
@@ -47,17 +49,19 @@ uv run python -m ggrpo.score --score.predictions runs/lora/beam_search.jsonl --s
 - **Tests:** `uv run pytest`. `tests/test_harness.py` is authoritative only inside the VM.
 
 ## Verified (Oct 22, 2026)
-- **Toolchain** (step 0): official HumanEval-C O0/O2 recompiles byte-identically for 316/328 rows, and BringUp for 131/132.
+- **Toolchain:** official HumanEval-C O0/O2 recompiles byte-identically for 316/328 rows, and BringUp for 131/132.
   These were not data errors. Our C came from LLM4Decompile, whose problem order differs for 6 problems
-  (`step0/mismatch_findings.md`). The authors' own sources (HF `asmbench_source`) recompile to all 328 rows.
+  (`docs/toolchain.md`). The authors' own sources (HF `asmbench_source`) recompile to all 328 rows.
 - **Rewritten harness, in the VM:**
   - HumanEval references pass 164/164 with the authors' tests. With LLM4Decompile's drivers they pass 158/164, failing on the
     same 6 problems as the old harness.
   - All 952 MBPP references pass.
-  - On the 164 step-0 predictions, the old and new harnesses give the same verdict for every task.
-- **Prompt fidelity:** all 164 prompts are byte-identical to the paper's f-string, and their token counts equal the step-0 run.
-- **Extraction:** the regex in `config.toml` equals the paper's `split` on edge cases and on all 164 step-0 outputs.
+- **MBPP build:** `ggrpo.build` reproduces the first MBPP-C O2 build byte for byte (x86, arm, driver, verdict, 973 rows),
+  and `data/train.jsonl` is unchanged.
+  - On the 164 beam-8, 16k-cap predictions, the old and new harnesses give the same verdict for every task.
+- **Prompt fidelity:** all 164 prompts are byte-identical to the paper's f-string, and their token counts equal the beam-8, 16k-cap run.
+- **Extraction:** the regex in `config.toml` equals the paper's `split` on edge cases and on all 164 beam-8, 16k-cap outputs.
 - **TRL:** `grpo.yaml` parses with TRL 1.16. `TODO` values are rejected, and `reward_pass` works against the live server.
-- **Step-0 baseline** (beam 8, `repetition_penalty` 1.1 inherited, 16000-token cap, VM): **72/164 = 43.9%** with the
+- **Baseline** (`data/raw/humaneval_beam8_cap16k.jsonl`: beam 8, `repetition_penalty` 1.1 inherited, 16000-token cap, VM): **72/164 = 43.9%** with the
   authors' tests. With LLM4Decompile's drivers it is 68/164 (68/158). The paper reports 45.12% = 74/164.
   This run hit the 16000-token cap on some tasks; the paper's cap is `32000 - prompt tokens`.

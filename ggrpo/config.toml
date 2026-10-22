@@ -2,10 +2,10 @@
 # Override any key from the command line: --section.key value (e.g. --generate.mode sample).
 
 [data]
-mbpp = "data/raw/mbpp_armv8_O2_ventura.parquet"
+mbpp = "data/mbpp_armv8_O2.parquet"                      # python -m ggrpo.build (VM)
 humaneval = "data/raw/gg-bench-armv8-O2.parquet"         # HF ahmedheakl/gg-bench-armv8-O2 @ 32a82dd9 (x86, arm, file)
 humaneval_tests = "data/raw/asmbench_source.parquet"     # HF ahmedheakl/asmbench_source @ 89bca970 (file, code, test)
-step0_predictions = "data/raw/step0_preds_beam8_16k.jsonl"   # ponyo, beam 8, 16000-token cap
+beam8_cap16k = "data/raw/humaneval_beam8_cap16k.jsonl"   # ponyo, beam 8, 16000-token cap (raw completions)
 # train_ids = "data/train_ids.txt"    # vetted subset (whitespace-separated task ids); unset = all valid MBPP-C
 train = "data/train.jsonl"            # also named in grpo.yaml (TRL owns that file)
 eval = "data/eval.jsonl"
@@ -33,6 +33,14 @@ cpu_seconds = 5
 max_file_bytes = 16777216
 stderr_tail = 600
 
+[build]   # python -m ggrpo.build, in the VM: MBPP-C -> x86/arm with GG's compile commands (train/compile_*_clang.py)
+source = "data/raw/decompile_eval_mbpp.parquet"   # HF LLM4Binary/decompile-eval @ b9271fae, mbpp, language c, opt O0
+x86 = ["clang", "-S", "-target", "x86_64-apple-darwin"]
+arm = ["clang", "-arch", "arm64", "-S"]
+opt = "-O2"
+workers = 8
+out = "data/mbpp_armv8_O2.parquet"
+
 [generate]
 model = "ahmedheakl/gg-armv8-O2"
 revision = "0444a378f384300187c7f43914fc986a81ff051a"
@@ -46,7 +54,7 @@ seed = 0
 # Decoding is explicit: unset fields come from the checkpoint's generation_config.json
 # (do_sample=true, temperature=0.7, top_k=20, top_p=0.8, repetition_penalty=1.1).
 # The paper's script passes only num_beams=8, so it inherited do_sample=true (beam sampling), while the paper
-# text says sampling was disabled. This mode follows the text and the step-0 run. Open question for the authors.
+# text says sampling was disabled. This mode follows the text and the beam8_cap16k run. Open question for the authors.
 # temperature/top_k/top_p only act when do_sample is true, so they are left unset here.
 [generate.beam_search]
 num_beams = 8
@@ -75,7 +83,7 @@ sample = true        # true: as released (inherits do_sample=true); false: adds 
 out = "runs/paper/as_released"
 
 [equivalence]   # python -m ggrpo.equivalence: log-probs of fixed completions, per package environment, same GPU
-completions = "data/raw/step0_preds_beam8_16k.jsonl"
+completions = "data/raw/humaneval_beam8_cap16k.jsonl"
 attn_implementation = "flash_attention_2"
 max_tokens = 8192     # prompt + completion; longer sequences are skipped (full-vocabulary logits on a 16 GB GPU)
 out = "runs/equivalence/paper_flash.jsonl"

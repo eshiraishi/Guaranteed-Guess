@@ -8,14 +8,10 @@ from ggrpo.settings import Settings
 settings = Settings()
 log = structlog.get_logger("ggrpo")
 
-mbpp = pl.read_parquet(settings.data.mbpp).filter(ref_verdict="pass", neg_verdict="empty")
-if (mbpp["cflags"] != "[]").any():
-    raise ValueError("the harness compiles drivers without extra flags, but some MBPP-C tasks have cflags")
-mbpp = mbpp.select(
-    "task_id",
-    "x86",
-    "arm_ref",
-    driver=pl.col("support_src").str.json_decode(pl.Struct({"test.c": pl.String})).struct.field("test.c"),
+mbpp = (
+    pl.read_parquet(settings.data.mbpp)
+    .filter(ref_verdict="pass", neg_verdict="link_err")
+    .select("task_id", "x86", "arm_ref", "driver")
 )
 if settings.data.train_ids:
     mbpp = mbpp.filter(pl.col("task_id").is_in(settings.data.train_ids.read_text().split()))

@@ -1,0 +1,10 @@
+% Switches. Draft: \boolfalse{submit} shows the status colors and every optional block, with ?? for missing numbers.
+% Submitted version: \booltrue{submit}, then turn off any block that is not ready.
+\booltrue{submit}
+\togglefalse{tracked}   % show changes against the 21:35 version; turn off before submitting
+
+\toggletrue{dsm}   % training ended 19:27 GST; its blocks hide in submit mode until its HumanEval lands
+\toggletrue{sft}   % SFT trains between DSM checkpoints (Enzo, Oct 23); its blocks hide in submit mode until HumanEval lands
+\toggletrue{bringupTrained}
+\toggletrue{figTrain}
+\toggletrue{figDev}

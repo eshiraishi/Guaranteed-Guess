@@ -1,7 +1,7 @@
 [project]
 name = "ggrpo"
 version = "0.1.0"
-description = "GRPO + (Q)LoRA on Guaranteed Guess (x86 -> ARMv8 O2) with a test-based reward"
+description = "Full-parameter GRPO on Guaranteed Guess (x86 -> ARMv8 O2) with a test-based reward"
 authors = [
     { name = "Enzo Shiraishi", email = "enzo.shiraishi@gmail.com" }
 ]
@@ -12,6 +12,8 @@ dependencies = [
     "pydantic==2.14.1",
     "pydantic-settings==2.16.1",
     "structlog==26.1.0",
+    "tenacity==9.2.1",
+    "wandb==0.31.0",
 ]
 
 [project.optional-dependencies]
@@ -20,9 +22,7 @@ reward = [
     "uvicorn==0.54.0",
 ]
 train = [
-    "bitsandbytes==0.50.2",
-    "trackio==0.43.0",
-    "trl[peft,vllm]==1.16.0",
+    "trl[vllm]==1.16.0",
     "vllm==0.31.0",
 ]
 paper = [

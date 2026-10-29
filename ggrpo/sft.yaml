@@ -1,0 +1,54 @@
+# TRL's own config for `trl sft --config sft.yaml` (TrlParser: SFTConfig + ModelConfig + dataset mixture).
+# SFT baseline: GG's checkpoint fine-tuned on the GRPO train problems, labelled with their reference ARM. It separates
+# "new training problems" from "reinforcement signal" in the GRPO gain. Launched by ops/lanes/sft.sh on totoro GPU0.
+# Recipe: GG's own run, from the training_args.bin / README of the released checkpoint (rev 0444a378; LLaMA-Factory,
+# 8 x A100, 12 per GPU x 2 accumulation = 192, 12,476 steps). Where the paper (Sec. 3.2) differs, the release wins: it
+# says paged AdamW and weight decay 0.001, the release ran plain AdamW and 0.0.
+# Shared with the GRPO arms instead of GG's 192: 16 prompts per update for 2 epochs (108 updates vs GRPO's 106),
+# since 192 would give 10 updates on 857 problems (Enzo, Oct 23). No tuning sweep (Enzo, Oct 23), as for the GRPO arms.
+env:
+  WANDB_ENTITY: assembly-transpilation  # transformers' W&B callback reads both from here (config.toml [track])
+  WANDB_PROJECT: rlvr
+  HF_HUB_OFFLINE: "1"                   # use the cached 0444a378 snapshot, as in grpo.yaml
+
+# Model: the same start as every GRPO arm
+model_name_or_path: ahmedheakl/gg-armv8-O2
+model_revision: 0444a378f384300187c7f43914fc986a81ff051a
+dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as grpo.yaml and GG's bf16 run
+
+# Data: prompt/completion pairs (config.toml data.sft, 857 = train minus data.sft_exclude); TRL puts the loss on the
+# completion only for this format, as LLaMA-Factory's default (train_on_prompt false) did for GG
+datasets:
+  - path: json
+    data_files: data/sft_train.jsonl    # written by `python -m ggrpo.data`
+
+# GG's release
+learning_rate: 2.0e-5
+lr_scheduler_type: cosine
+warmup_steps: 0.1                       # a float < 1 is a ratio of total steps (release: warmup_ratio 0.1)
+weight_decay: 0.0
+optim: adamw_torch
+max_grad_norm: 1.0
+num_train_epochs: 2
+max_length: 16384                       # GG's 16k training context; nothing in data.sft is longer, so nothing is truncated
+
+# Shared with the GRPO arms: 16 prompts per update (grpo.yaml: 128 completions / 8 per prompt)
+per_device_train_batch_size: 1          # one sequence of up to 16k tokens per micro-batch (full-vocabulary logits)
+gradient_accumulation_steps: 16         # ceil(857 / 16) = 54 updates per epoch, the last one with 9 problems
+
+# Precision and memory
+bf16: true
+gradient_checkpointing: true            # memory only; GG ran without it
+
+# Tracking (W&B, as grpo.yaml; WANDB_API_KEY from .env): every seed is named "SFT", the seed is in the run config and
+# ops/lanes/sft.sh fixes the run id sft-seedN
+seed: 0
+report_to: [wandb]
+run_name: SFT
+output_dir: runs/sft_seed0
+logging_steps: 1
+
+# Checkpoints for the eval lanes: checkpoint-54 (epoch 1) and checkpoint-108 (final, the reported model), weights,
+# tokenizer and trainer_state.json only
+save_strategy: epoch
+save_only_model: true

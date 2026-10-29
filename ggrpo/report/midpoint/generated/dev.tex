@@ -1,0 +1,14 @@
+\begin{tikzpicture}\begin{axis}[width=0.5\linewidth, height=4.2cm, xlabel=Step, enlarge x limits=0.03, tick pos=left, tick label style={font=\scriptsize}, label style={font=\small}, legend style={font=\scriptsize, cells={anchor=west}}, ylabel={Solved (\%)}, ymin=20, ymax=70, legend pos=outer north east]
+\addplot[series1, mark=*] coordinates {(0,59.6) (27,56.4) (54,56.4) (81,58.5) (106,57.4)};
+\addlegendentry{GRPO (beam search)}
+\addplot[series1, mark=square*, dashed] coordinates {(0,45.1) (27,46.7) (54,47.5) (81,48.8) (106,48.3)};
+\addlegendentry{GRPO (sampling)}
+\addplot[series2, mark=*] coordinates {(0,59.6) (27,56.4) (81,57.4) (106,56.4)};
+\addlegendentry{DeepSeekMath GRPO (beam search)}
+\addplot[series2, mark=square*, dashed] coordinates {(0,45.1) (27,46.0) (54,47.2) (81,47.3) (106,47.6)};
+\addlegendentry{DeepSeekMath GRPO (sampling)}
+\addplot[series3, mark=*] coordinates {(0,59.6) (54,55.3) (108,58.5)};
+\addlegendentry{SFT (beam search)}
+\addplot[series3, mark=square*, dashed] coordinates {(0,45.1) (54,33.9) (108,43.5)};
+\addlegendentry{SFT (sampling)}
+\end{axis}\end{tikzpicture}

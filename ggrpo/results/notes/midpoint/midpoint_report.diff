@@ -1,0 +1,191 @@
+--- /Users/eshiraishi/Downloads/midpoint_report.tex	2026-10-22 12:22:45
++++ midpoint_report.tex	2026-10-22 18:35:37
+@@ -7,6 +7,7 @@
+ \usepackage{hyperref}
+ \usepackage{url}
+ \usepackage{booktabs}
++\usepackage{amsmath}
+ \usepackage{microtype}
+ \usepackage{xcolor}
+ \newcommand{\placeholder}[1]{\texttt{\textcolor{blue}{[#1]}}}
+@@ -40,9 +41,9 @@
+ 
+ Our earlier proposal applied DAPO to vision-language-action (VLA) models, which produce robot actions from images and instructions \citep{dapo}. We changed the topic for two reasons. First, research on VLAs is currently centered on deployment cost, namely latency and memory \citep{guan2025efficientvla,yu2025survey}. The existing reinforcement learning work for VLAs reports task success and relies on robot simulation to produce each training sample, and the feedback from these simulations is often sparse \citep{simplevlarl,vlarl,rlinfvla}. This is costly under limited compute. Second, translating assembly poses the same research question in a setting that our compute can support. The output can be checked exactly by running tests, one attempt is a single generation followed by a test run, and the model is small enough for parameter-efficient training on one GPU \citep{gg}. The problem is also practically relevant, because the translated code of this approach runs faster than Apple's Rosetta~2 \citep{gg}.
+ 
+-The method we study is Group Relative Policy Optimization (GRPO) with a test-based reward, combined with Quantized Low-Rank Adaptation (QLoRA) to reduce memory use \citep{deepseekmath,qlora}. Supervised fine-tuning is a necessary first stage for GRPO. Because we use the same data as GG, we start from its released checkpoint instead of repeating that stage, which saves compute without changing the pipeline.
++The method we study is Group Relative Policy Optimization (GRPO) with a test-based reward, combined with Quantized Low-Rank Adaptation (QLoRA) to reduce memory use \citep{deepseekmath,qlora}. GRPO learns only from problems on which some attempts pass and others fail, so it needs a starting model that already solves part of the problems. The released GG checkpoint passes 44\% of the HumanEval-C problems at O2 in our evaluation (Section~\ref{sec:baseline}). We therefore start from it instead of repeating its supervised fine-tuning, which saves compute.
+ 
+-The rest of this report contains a short review of related work (Section~\ref{sec:related}), the baseline we evaluate (Section~\ref{sec:baseline}), the progress and plan for our method (Section~\ref{sec:method}), and the remaining work with its distribution among the authors (Section~\ref{sec:remaining}).
++The rest of this report contains a short review of related work (Section~\ref{sec:related}), the baseline we evaluate and its results (Section~\ref{sec:baseline}), the progress and plan for our method (Section~\ref{sec:method}), and the remaining work with its distribution among the authors (Section~\ref{sec:remaining}).
+ 
+ \section{Related Work}
+ \label{sec:related}
+@@ -54,7 +55,7 @@
+ Code is a natural fit for RLVR because tests give an exact and inexpensive result. RLEF trains code models on the results of running their own code \citep{rlef}, and VeRPO uses partial test results as a denser reward \citep{verpo}. Recent works apply the same idea to low-level code, where the output can be executed or formally verified. SuperCoder uses reinforcement learning to produce faster assembly programs, rewarding both correctness and speed \citep{supercoder}. LLM-VeriOpt trains a small model with GRPO, using a formal verifier as the reward, to optimize compiler code \citep{veriopt}. AutoDecompiler uses compilation and test feedback to train a model that converts binaries back into source code \citep{autodecompiler}, and TRAVEL applies reinforcement learning with execution feedback to translate C code into Rust \citep{travel}. These works show that RLVR can improve code, assembly, and translation. To our knowledge, none of them applies it to translating CISC assembly into RISC assembly.
+ 
+ \paragraph{Assembly translation.}
+-Guess \& Sketch combines guesses from a language model with a solver that checks whether the translation is equivalent \citep{guesssketch}. CRT is a lightweight language model that translates x86 assembly into ARM and RISC-V \citep{crt}. GG fine-tunes small pre-trained code models (DeepSeek-Coder 1.3B and Qwen2.5-Coder 0.5B and 1.5B) on about 1.3 million C programs from AnghaBench and The Stack v2, compiled to both instruction sets. It generates candidate translations and checks them with software tests. It is evaluated on HumanEval, a set of programming problems whose C versions are translated and then executed, and on BringupBench, a set of larger programs for embedded systems \citep{gg}. In GG, the tests only accept or reject the output of the model. We use the same tests as a training signal.
++Guess \& Sketch combines guesses from a language model with a solver that checks whether the translation is equivalent \citep{guesssketch}. CRT is a lightweight language model that translates x86 assembly into ARM and RISC-V \citep{crt}. GG fine-tunes small pre-trained code models (DeepSeek-Coder 1.3B and Qwen2.5-Coder 0.5B and 1.5B) on about 1.3 million C programs from AnghaBench and The Stack v2, compiled to both instruction sets. It generates candidate translations and checks them with software tests. It is evaluated on HumanEval \citep{humaneval}, a set of programming problems whose C versions are translated and then executed, and on BringupBench, a set of larger programs for embedded systems \citep{gg}. In GG, the tests only accept or reject the output of the model. We use the same tests as a training signal.
+ 
+ \paragraph{Parameter-efficient training.}
+ Low-Rank Adaptation (LoRA) trains a small number of added weights instead of the whole model \citep{lora}. QLoRA does the same on top of a base model stored in 4-bit precision, which further reduces memory use \citep{qlora}. We use both so that training fits on a single GPU.
+@@ -62,25 +63,71 @@
+ \section{Baseline}
+ \label{sec:baseline}
+ 
+-Our baseline is the released GG model for ARMv8 at optimization level O2, which is Qwen2.5-Coder-1.5B-Instruct fine-tuned on the GG data \citep{gg}. We do not train it. We evaluate it with our own reward harness: the predicted ARM assembly is the only definition of the function in a test program, which is assembled, linked, and run. An empty or truncated prediction therefore fails. This differs from the original evaluation, which compiles the C version of the function into the test binary and could let an empty prediction pass.
++Our baseline is the released GG model for ARMv8 at optimization level O2, which is Qwen2.5-Coder-1.5B-Instruct fine-tuned on the GG data \citep{gg}. We do not train it.
+ 
+-We evaluate on the 164 HumanEval-C problems at O2 and report the pass rate, that is, the fraction of problems whose translation passes all tests. We report it under two decoding settings: beam search, as in the original evaluation, and sampling at temperature~1, which matches how the model is used during GRPO. The first setting also checks whether our harness reproduces the number reported for this model \citep{gg}.
++\paragraph{Evaluation.}
++We evaluate on the 164 HumanEval-C problems at O2. The input is the x86 assembly of the official GG benchmark. The tests are the authors' own C test programs, which they released on Hugging Face (\texttt{asmbench\_source}). A problem counts as solved if the translation passes all of its tests, and we report the fraction of solved problems (pass@1). Our reward harness checks each translation: the predicted ARM assembly is the only definition of the function in the test program, which is assembled, linked, and run in a sandbox without network access, with limits of 10~s wall time and 5~s CPU time. As a check of the harness, the official reference ARM assembly passes all 164 problems, and an empty prediction fails all 164. We use the prompt and the answer extraction of the authors' evaluation script, and beam search with 8 beams, as stated in the paper.
+ 
+-\placeholder{Result pending} The harness requires the data and test programs to be built with the same compiler toolchain as the official GG data (Section~\ref{sec:method}). We will report the pass rates here once this step is complete.
++\paragraph{Results.}
++Table~\ref{tab:baseline} gives the results. Our first run solves 72 of the 164 problems (43.9\%), 2 problems fewer than the 74 (45.1\%) reported by the authors. Further runs, listed in the table, test the remaining differences in the evaluation settings.
+ 
++\begin{table}[h]
++\centering
++\caption{Problems solved (pass@1) by the released GG O2 model. HumanEval-C has 164 problems. BringUp has 66 programs, of which 65 can be built; percentages are out of 65, as in the paper.}
++\label{tab:baseline}
++\small
++\begin{tabular}{@{}llcc@{}}
++\toprule
++Source & Decoding and limits & HumanEval-C O2 & BringUp O2 \\
++\midrule
++GG paper \citep{gg} & beam 8 & 74 (45.1\%) & 10 (15.4\%) \\
++Ours & beam 8, 16{,}000 new tokens & 72 (43.9\%) & -- \\
++Ours & beam 8, 32{,}000 tokens, transformers 4.50 & \placeholder{running} & \placeholder{running} \\
++Ours & beam sampling, authors' script as released & \placeholder{queued} & -- \\
++Ours & greedy, authors' BringUp script as released & -- & \placeholder{running} \\
++\bottomrule
++\end{tabular}
++\end{table}
++
++\paragraph{Sources of the difference.}
++Most of the original difference came from the tests. We first used the HumanEval-C tests of LLM4Decompile \citep{llm4decompile}. With them, the same translations solve 68 problems, and the official reference assembly fails 6, because for these 6 problems the official assembly was built from a different C function. With the authors' tests, the reference passes all 164 problems, and the two test sets give the same result on the other 160. The remaining 2 problems may come from three differences, which we test in separate runs:
++\begin{itemize}
++  \item \emph{Length limit.} Our first run stops after 16{,}000 new tokens, while the authors' script allows 32{,}000 tokens minus the prompt. 7 of our 164 outputs reached the limit, and all 7 failed.
++  \item \emph{Decoding.} The paper states that sampling was disabled, but the authors' script sets only the number of beams. The model's configuration file then turns sampling on (temperature 0.7, top-$k$ 20, top-$p$ 0.8), so the script runs beam sampling.
++  \item \emph{Software.} Our first run used transformers 5.20 with PyTorch's attention; the model was released with transformers 4.50, and the authors' script uses FlashAttention-2.
++\end{itemize}
++The compiler is not a cause: our toolchain reproduces the official data exactly (Section~\ref{sec:method}). We have asked the authors which decoding produced the published result.
++
+ \section{Proposed Method}
+ \label{sec:method}
+ 
+ \paragraph{Method.}
+-We apply GRPO to the GG checkpoint. For each problem, the model generates a group of eight translations. Each translation receives a reward of 1 if it passes all tests and 0 otherwise. The model is updated to favor the translations that pass relative to the rest of the group. We use the GRPO implementation in the TRL library, and we write the reward function, the data preparation, and the evaluation code ourselves. The two training variants differ only in the base weights: LoRA on a 16-bit base model, and QLoRA on a 4-bit base model. We compare both with the baseline of Section~\ref{sec:baseline}. The training problems come from MBPP-C, which has assertion tests, and ExeBench, which has real input and output examples. HumanEval-C is reserved for evaluation. We expect to use 100 to 300 training steps per variant with identical settings.
++We apply GRPO to the GG checkpoint. For each problem, the model generates a group of $G=8$ translations. Translation $i$ receives a reward $r_i=1$ if it passes all tests and $r_i=0$ otherwise. Its advantage is its reward relative to the rest of the group,
++\begin{equation}
++\hat{A}_i = \frac{r_i - \operatorname{mean}(r_1,\dots,r_G)}{\operatorname{std}(r_1,\dots,r_G)},
++\end{equation}
++and the model is updated to make translations with a positive advantage more likely. A group in which all translations pass, or all fail, gives no update. We use the GRPO implementation in the TRL library without a KL penalty, and we write the reward function, the data preparation, and the evaluation code ourselves. The two training variants differ only in the base weights: LoRA on a 16-bit (bfloat16) base model, and QLoRA on a 4-bit (NF4) base model \citep{lora,qlora}. Both use the same settings, and both are compared with the baseline of Section~\ref{sec:baseline} under the same evaluation.
+ 
++\paragraph{Data.}
++The training problems come from the C version of MBPP \citep{mbpp} prepared by LLM4Decompile \citep{llm4decompile}, which includes assertion tests. We compile each function to x86 and ARM assembly at O2 with the GG toolchain. Of the 973 problems that compile, we keep the 952 whose reference ARM assembly passes its own tests. The other 21 have faulty tests, for example tests that compare strings by address. HumanEval-C is used only for evaluation, and BringUp at O2 is a second evaluation for the final models. We start with MBPP-C only and will add ExeBench only if more training problems are needed.
++
++\paragraph{Settings.}
++The following settings are fixed: a group size of 8, sampling at temperature~1 without top-$k$ or top-$p$, no KL penalty, translations cut by the length limit excluded from the loss, LoRA on all linear layers, generation with vLLM \citep{vllm} inside the training process, and bfloat16 training. The following settings will be fixed before the first run: the LoRA rank and scaling, the learning rate, the batch size, the number of steps (we expect 100 to 300), the maximum translation length, and the loss aggregation (per sequence as in GRPO, or per token as in DAPO \citep{dapo}). For the length limit, the reference ARM assembly of the training problems has a median length of 717 tokens, and 97 of the 952 references exceed 2{,}048 tokens.
++
+ \paragraph{Progress.}
+-The reward harness described above has been implemented. It runs on a Mac, because the GG data is ARM assembly produced by Apple's compiler and can only be assembled and run natively on Apple Silicon. The training machine is a Linux server with one NVIDIA RTX 6000 Blackwell GPU, which is the compute available to us, and it reaches the harness through a single network tunnel. This differs from our earlier assumption of up to two GPUs. We also prepared the code that loads the problems and the tests.
++\emph{Toolchain.} The official GG data was produced with Xcode 14.3 and the macOS 13.3 SDK, and our Mac has a newer toolchain that produces different assembly. We therefore built a macOS 13.6 virtual machine with Xcode 14.3.1 (Apple clang 14.0.3, SDK 13.3). Compiling the authors' C sources in it reproduces all 328 official HumanEval-C files (x86 and ARM, O0 and O2) and 131 of the 132 BringUp files byte for byte. All our training and test programs are built in this machine.
+ 
+-The remaining step before training is to match the toolchain. The official GG data was produced with Xcode 14.3 and the macOS 13.3 SDK, while our Mac has a newer toolchain, and data regenerated with it differs from the official data. We are therefore building a macOS 13 virtual machine with Xcode 14.3 and will regenerate our data and run the harness inside it. We treat the work as complete when regenerated HumanEval-C output matches the official data. This step is in progress.
++\emph{Reward harness.} The harness runs as a scoring service inside the virtual machine, because the GG data is ARM assembly for macOS and can only be assembled and run on Apple Silicon. The same service gives the training reward and the evaluation results. Besides the HumanEval-C checks of Section~\ref{sec:baseline}, the reference assembly of all 952 training problems passes. For BringUp we use the authors' test procedure, with which the official reference assembly passes 65 of the 66 programs. The remaining program cannot be built, which is consistent with the paper's BringUp results, all of which are multiples of 1/65.
+ 
++\emph{Training.} The training machine is a Linux server with one NVIDIA RTX PRO 6000 Blackwell GPU (96~GB), which reaches the scoring service through a single network tunnel. This differs from our earlier assumption of up to two GPUs. A second machine with a 16~GB GPU runs evaluations. The TRL configuration and the reward function are written and tested against the scoring service. Training starts once the remaining settings are fixed.
++
+ \paragraph{Risks.}
+-The reward harness runs on a single Mac, so its throughput limits the number of training steps. We have not yet verified that updated LoRA weights are passed correctly to the fast generation engine when the base model is 4-bit. We will test this on a short run before any long training. Some test problems overlap between datasets, and we remove duplicates before training.
++\begin{itemize}
++  \item \emph{QLoRA with fast generation.} With a 4-bit base model, TRL adds the LoRA weights into the 4-bit weights of the generation engine at every update and removes them afterwards. We have not verified that this works, or that rounding does not slowly change the base weights. We will test it on a short run before any long training. If it fails, both variants will generate with the training model itself, so that they still differ only in the base weights.
++  \item \emph{Size of the test set.} With 164 problems, one problem is 0.6 percentage points, so small differences between models cannot be distinguished from noise. We will report confidence intervals and compare models problem by problem with a paired test.
++  \item \emph{Overlap between datasets.} We have not yet checked whether MBPP-C problems overlap with HumanEval-C or with the GG training data. We will check this and remove overlapping problems before training.
++  \item \emph{Throughput.} The scoring service runs on a single Mac, and one check takes 0.1 to 0.5~s. Its throughput limits the number of training steps.
++\end{itemize}
+ 
+ \section{Remaining Work and Distribution}
+ \label{sec:remaining}
+@@ -90,20 +137,36 @@
+ \toprule
+ \textbf{Dates} & \textbf{Work} \\
+ \midrule
+-Oct. 24--30 & Finish the toolchain setup, regenerate the data, report the baseline. \\
+-Oct. 31--Nov. 13 & Run a short test, then train the LoRA and QLoRA variants. \\
+-Nov. 14--27 & Evaluate both variants, add a third baseline, run one ablation. \\
+-Nov. 28--Dec. 7 & Analyze results and failures, prepare the final report and code. \\
++Oct. 24--30 & Complete the baseline runs of Table~\ref{tab:baseline}. Measure the baseline with sampling at temperature~1, the setting used during GRPO, on HumanEval-C and on the training problems. Check the overlap between datasets. Fix the training settings and run short LoRA and QLoRA tests. \\
++Oct. 31--Nov. 13 & Train the LoRA and QLoRA variants with identical settings. \\
++Nov. 14--27 & Evaluate both variants and the baselines on HumanEval-C and BringUp at O2. Train the third baseline. Run the ablation and the parameter study. \\
++Nov. 28--Dec. 8 & Analyze the results and the types of failure, prepare the final report, and release the code. \\
+ \bottomrule
+ \end{tabular}
+ \end{center}
+ 
+-The final report will compare against at least three baselines: the released GG model, the LoRA variant, and a third chosen after the first results.
++\paragraph{Baselines.}
++The final report will compare GRPO with QLoRA against three baselines: (1) the released GG model; (2) GRPO with LoRA on the 16-bit model, which shows the cost of the 4-bit base; and (3) rejection-sampling fine-tuning \citep{rft}, in which the GG model translates each training problem several times and is fine-tuned with LoRA on the translations that pass. The third baseline uses the same tests as GRPO, but without reinforcement learning. \placeholder{third baseline to confirm}
+ 
+-\placeholder{Workload distribution to be completed}
++\paragraph{Ablation and parameter study.}
++\placeholder{to confirm} As the ablation, we compare loss aggregation per sequence (GRPO) with aggregation per token (DAPO). As the parameter study, we vary the LoRA rank of the QLoRA variant.
+ 
++\paragraph{Workload distribution.}
++\begin{center}
++\begin{tabular}{p{0.60\linewidth} p{0.32\linewidth}}
++\toprule
++\textbf{Work} & \textbf{Member} \\
++\midrule
++Training: settings, short tests, LoRA and QLoRA runs & \placeholder{member} \\
++Evaluation and baselines: HumanEval-C, BringUp, third baseline & \placeholder{member} \\
++Data and analysis: overlap check, ablation, parameter study, failure types & \placeholder{member} \\
++Final report and code release & All members \\
++\bottomrule
++\end{tabular}
++\end{center}
++
+ \small
+-\begin{thebibliography}{20}
++\begin{thebibliography}{30}
+ 
+ \bibitem{gg}
+ A.~Heakl, S.~Hashmi, C.~Abi, C.~Lee, and A.~Mahmoud.
+@@ -231,6 +294,36 @@
+ \newblock Advances in Neural Information Processing Systems (NeurIPS), 2023; arXiv:2305.14314.
+ \newblock \url{https://arxiv.org/abs/2305.14314}.
+ 
++\bibitem{humaneval}
++M.~Chen et al.
++\newblock Evaluating Large Language Models Trained on Code.
++\newblock arXiv:2107.03374, 2021.
++\newblock \url{https://arxiv.org/abs/2107.03374}.
++
++\bibitem{mbpp}
++J.~Austin et al.
++\newblock Program Synthesis with Large Language Models.
++\newblock arXiv:2108.07732, 2021.
++\newblock \url{https://arxiv.org/abs/2108.07732}.
++
++\bibitem{llm4decompile}
++H.~Tan et al.
++\newblock LLM4Decompile: Decompiling Binary Code with Large Language Models.
++\newblock Conference on Empirical Methods in Natural Language Processing (EMNLP), 2024; arXiv:2403.05286.
++\newblock \url{https://arxiv.org/abs/2403.05286}.
++
++\bibitem{vllm}
++W.~Kwon et al.
++\newblock Efficient Memory Management for Large Language Model Serving with PagedAttention.
++\newblock ACM Symposium on Operating Systems Principles (SOSP), 2023; arXiv:2309.06180.
++\newblock \url{https://arxiv.org/abs/2309.06180}.
++
++\bibitem{rft}
++Z.~Yuan et al.
++\newblock Scaling Relationship on Learning Mathematical Reasoning with Large Language Models.
++\newblock arXiv:2308.01825, 2023.
++\newblock \url{https://arxiv.org/abs/2308.01825}.
++
+ \end{thebibliography}
+ 
+ \end{document}

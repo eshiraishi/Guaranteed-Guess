@@ -1,0 +1,8 @@
+\begin{tikzpicture}\begin{axis}[ybar, bar width=8pt, width=0.55\linewidth, height=4.5cm, ymin=0, ymax=70, ylabel={Solved (\%)}, symbolic x coords={HumanEval-C,BringUp}, xtick=data, tick pos=left, enlarge x limits=0.5, nodes near coords, point meta=explicit symbolic, every node near coord/.append style={font=\tiny}, tick label style={font=\scriptsize}, label style={font=\small}, legend style={font=\scriptsize, cells={anchor=west}}, legend pos=outer north east, area legend]
+\addplot[draw=black!60, pattern=north east lines, pattern color=black!60] coordinates {(HumanEval-C,45.1) [74] (BringUp,15.4) [10]};
+\addplot[fill=ggours, draw=ggours] coordinates {(HumanEval-C,43.9) [72] (BringUp,9.2) [6]};
+\addplot[fill=series1, draw=series1] coordinates {(HumanEval-C,53.0) [87] (BringUp,7.7) [5]};
+\addplot[fill=series2, draw=series2] coordinates {(HumanEval-C,51.2) [84] (BringUp,7.7) [5]};
+\addplot[fill=series3, draw=series3] coordinates {(HumanEval-C,39.6) [65] (BringUp,6.2) [4]};
+\legend{{GG (reported) \citep{gg}},{GG (ours)},{GRPO},{DeepSeekMath GRPO},{SFT}}
+\end{axis}\end{tikzpicture}

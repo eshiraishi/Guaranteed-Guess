@@ -1,0 +1,55 @@
+# TRL's own config for `trl grpo --config grpo.yaml` (TrlParser: GRPOConfig + ModelConfig + dataset mixture).
+# Full-parameter GRPO from GG's checkpoint, which GG itself trained by full fine-tuning (model card tag `full`).
+# Values agreed Oct 22, 2026. Mark an undecided value TODO: TRL then refuses to start instead of using a library default.
+env:
+  TRACKIO_DIR: runs/trackio
+  HF_HUB_OFFLINE: "1"                   # vLLM loads the repo id without a revision: use the cached 0444a378 snapshot
+
+# Model
+model_name_or_path: ahmedheakl/gg-armv8-O2
+model_revision: 0444a378f384300187c7f43914fc986a81ff051a
+dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as GG's bf16 mixed-precision SFT
+
+# Data and reward
+datasets:
+  - path: json
+    data_files: runs/stress/longest16.jsonl        # written by `python -m ggrpo.data` (config.toml data.train)
+    columns: [prompt, task_id]
+reward_funcs: [ggrpo.reward.reward_pass]
+
+# GRPO
+num_generations: 8
+loss_type: dapo                         # TRL default; normalizes over the global accumulated batch, so accumulation is exact
+beta: 0.0
+learning_rate: 1.0e-6                   # TRL GRPO default; DAPO paper (constant 1e-6)
+max_steps: 106                          # 2 epochs: 858 train prompts // 16 per step = 53 (RepeatSampler drops the rest)
+per_device_train_batch_size: 4          # completions per micro-batch (memory); 8 OOMed in backward on a long batch (pilot step 19)
+gradient_accumulation_steps: 32         # 16 prompts x 8 completions = 128 per update (reward server throughput)
+max_completion_length: 4096             # covers all but 11/952 train references; base outputs p95 = 3194 tokens
+mask_truncated_completions: true
+
+# Sampling, explicit so nothing comes from the checkpoint's generation_config.json; config.toml [generate.sample] matches
+temperature: 1.0
+top_k: 0
+top_p: 1.0
+repetition_penalty: 1.0
+
+# Generation backend
+use_vllm: true
+vllm_mode: colocate
+
+# Precision and memory
+bf16: true
+gradient_checkpointing: true
+
+# Tracking (Trackio, local only: no Space, no Bucket)
+seed: 0
+report_to: [trackio]
+project: cs8001
+run_name: full
+trackio_space_id: null
+trackio_static_space_id: false
+output_dir: runs/full
+logging_steps: 1
+log_completions: true
+save_steps: 27                          # 27, 54, 81 and the final 106, about every half epoch (fp32 weights + optimizer, 18 GB each)

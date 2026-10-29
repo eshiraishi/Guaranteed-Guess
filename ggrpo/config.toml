@@ -8,18 +8,29 @@ humaneval_tests = "data/raw/asmbench_source.parquet"     # HF ahmedheakl/asmbenc
 beam8_cap16k = "data/raw/humaneval_beam8_cap16k.jsonl"   # ponyo, beam 8, 16000-token cap (raw completions)
 # train_ids = "data/train_ids.txt"    # vetted subset (whitespace-separated task ids); unset = all valid MBPP-C
 train = "data/train.jsonl"            # also named in grpo.yaml (TRL owns that file)
+dev = "data/dev.jsonl"                # checkpoint selection and tuning; HumanEval-C and BringUp stay held out
+sft = "data/sft_train.jsonl"          # train as prompt/completion pairs for the SFT baseline (sft.yaml)
+sft_exclude = ["mbpp/38"]            # 18,297 tokens with the chat template, over sft.yaml max_length (GG's 16k
+                                     # training context): dropped from SFT rather than truncated (Enzo, Oct 23)
+dev_fraction = 0.1                    # of distinct MBPP-C x86 programs, so identical prompts stay on one side
+split_seed = 0
 eval = "data/eval.jsonl"
 
 [prompt]   # eval/eval_huamaneval.py, verbatim
 template = "Convert the following x86 assembly code to ARM assembly:\n```x86asm\n{}\n```"
 # Rust regex (polars), group 1 == raw.split("```armasm\n")[-1].split("```")[0]; checked by tests/test_extract.py
 extract = '(?s)(?:.*```armasm\n)?(.*?)(?:```|$)'
+# GG's answer format, for SFT labels. GG's training code is unreleased; the released model answers exactly this way
+# (157/164 base beam-8 HumanEval outputs), and inference.py extracts the code from it
+answer = "```armasm\n{}\n```"
 
 [server]
 host = "0.0.0.0"
 port = 8765
 workers = 8
 url = "http://127.0.0.1:8765/score"   # as seen from totoro, through the SSH tunnel
+timeout = 1200                        # s per scoring request; worst case is 128 completions / 8 workers x (30 + 10) s = 640 s
+outage_seconds = 43200                # training waits this long for an unreachable server, logging each retry, then stops
 
 [harness]
 cc = ["clang", "-arch", "arm64", "-w"]
@@ -91,3 +102,104 @@ reference = "runs/equivalence/paper_flash.jsonl"   # compared against when it ex
 
 [log]
 file = "runs/ggrpo.jsonl"
+
+[track]   # python -m ggrpo.track (scored evals -> W&B, at their training step) and ggrpo.report (W&B -> paper table)
+entity = "assembly-transpilation"      # grpo.yaml WANDB_ENTITY
+project = "rlvr"                       # grpo.yaml WANDB_PROJECT
+exclude = ["satomi"]                   # BringUp: its reference never builds (helpers miss -I../common); the paper scores 65 of 66
+export = "results/paper/evals.csv"
+
+# Run ids are set by the launcher (WANDB_RUN_ID); names are the recipe, seeds live in the run config.
+# Metrics are eval/<benchmark>_<decoding>, all pass@1; sample8 is the dev diagnostic, not a reported metric.
+[track.runs.gg]
+name = "GG"                            # the base model, no RL
+[track.runs.gg.evals.0]
+dev_beam8 = "results/grpo_eval/base_dev_beam_search.scored.jsonl"
+dev_sample8 = "results/grpo_eval/base_dev_sample8.scored.jsonl"
+humaneval_beam8 = "results/humaneval/modern/modern_beam_search.scored.jsonl"
+humaneval_sample8 = "results/grpo_eval/base_humaneval_sample8.scored.jsonl"
+bringup_beam8 = "results/grpo_eval/base_bringup_beam8_rtx5000.scored.jsonl"
+bringup_greedy = "results/grpo_eval/base_bringup_greedy_rtx5000.scored.jsonl"
+
+[track.runs.grpo-seed0]
+name = "GRPO"
+[track.runs.grpo-seed0.evals.27]
+dev_beam8 = "results/grpo_eval/checkpoint-27_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/27_dev_sample8.scored.jsonl"
+[track.runs.grpo-seed0.evals.54]
+dev_beam8 = "results/grpo_eval/checkpoint-54_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/54_dev_sample8.scored.jsonl"
+[track.runs.grpo-seed0.evals.81]
+dev_beam8 = "results/grpo_eval/checkpoint-81_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/81_dev_sample8.scored.jsonl"
+[track.runs.grpo-seed0.evals.106]
+dev_beam8 = "results/grpo_eval/checkpoint-106_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/106_dev_sample8.scored.jsonl"
+humaneval_beam8 = "results/grpo_eval/checkpoint-106_humaneval.scored.jsonl"
+bringup_beam8 = "results/grpo_eval/checkpoint-106_bringup_beam8.scored.jsonl"
+bringup_greedy = "results/grpo_eval/checkpoint-106_bringup_greedy.scored.jsonl"
+humaneval_sample8 = "results/grpo_eval/checkpoint-106_humaneval_sample8.scored.jsonl"   # ponyo runs/full_eval
+
+[track.runs.grpo-seed1]   # stopped at update 31 (Enzo, Oct 23); checkpoint-27 is its only model
+name = "GRPO"
+[track.runs.grpo-seed1.evals.27]
+dev_beam8 = "results/grpo_eval/full_seed1/checkpoint-27_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/full_seed1/27_dev_sample8.scored.jsonl"
+
+[track.runs.dsm-seed0]   # GRPO (DeepSeekMath) seed 0; the files appear here as the eval lanes finish
+name = "GRPO (DeepSeekMath)"
+[track.runs.dsm-seed0.evals.27]
+dev_beam8 = "results/grpo_eval/dsm-seed0/checkpoint-27_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/dsm-seed0/27_dev_sample8.scored.jsonl"
+[track.runs.dsm-seed0.evals.54]
+dev_beam8 = "results/grpo_eval/dsm-seed0/checkpoint-54_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/dsm-seed0/54_dev_sample8.scored.jsonl"
+[track.runs.dsm-seed0.evals.81]
+dev_beam8 = "results/grpo_eval/dsm-seed0/checkpoint-81_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/dsm-seed0/81_dev_sample8.scored.jsonl"
+[track.runs.dsm-seed0.evals.106]
+dev_beam8 = "results/grpo_eval/dsm-seed0/checkpoint-106_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/dsm-seed0/106_dev_sample8.scored.jsonl"
+humaneval_beam8 = "results/grpo_eval/dsm-seed0/checkpoint-106_humaneval.scored.jsonl"
+bringup_beam8 = "results/grpo_eval/dsm-seed0/checkpoint-106_bringup_beam8.scored.jsonl"
+bringup_greedy = "results/grpo_eval/dsm-seed0/checkpoint-106_bringup_greedy.scored.jsonl"
+
+[track.runs.drgrpo-seed0]   # Dr. GRPO seed 0
+name = "Dr. GRPO"
+[track.runs.drgrpo-seed0.evals.27]
+dev_beam8 = "results/grpo_eval/drgrpo-seed0/checkpoint-27_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/drgrpo-seed0/27_dev_sample8.scored.jsonl"
+[track.runs.drgrpo-seed0.evals.54]
+dev_beam8 = "results/grpo_eval/drgrpo-seed0/checkpoint-54_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/drgrpo-seed0/54_dev_sample8.scored.jsonl"
+[track.runs.drgrpo-seed0.evals.81]
+dev_beam8 = "results/grpo_eval/drgrpo-seed0/checkpoint-81_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/drgrpo-seed0/81_dev_sample8.scored.jsonl"
+[track.runs.drgrpo-seed0.evals.106]
+dev_beam8 = "results/grpo_eval/drgrpo-seed0/checkpoint-106_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/drgrpo-seed0/106_dev_sample8.scored.jsonl"
+humaneval_beam8 = "results/grpo_eval/drgrpo-seed0/checkpoint-106_humaneval.scored.jsonl"
+bringup_beam8 = "results/grpo_eval/drgrpo-seed0/checkpoint-106_bringup_beam8.scored.jsonl"
+
+[track.runs.sft-seed0]   # SFT baseline seed 0 (sft.yaml): 108 updates; checkpoint-108 is the reported model
+name = "SFT"
+[track.runs.sft-seed0.evals.54]
+dev_beam8 = "results/grpo_eval/sft-seed0/checkpoint-54_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/sft-seed0/54_dev_sample8.scored.jsonl"
+[track.runs.sft-seed0.evals.108]
+dev_beam8 = "results/grpo_eval/sft-seed0/checkpoint-108_dev.scored.jsonl"
+dev_sample8 = "results/grpo_eval/sft-seed0/108_dev_sample8.scored.jsonl"
+humaneval_beam8 = "results/grpo_eval/sft-seed0/checkpoint-108_humaneval.scored.jsonl"
+bringup_beam8 = "results/grpo_eval/sft-seed0/checkpoint-108_bringup_beam8.scored.jsonl"
+bringup_greedy = "results/grpo_eval/sft-seed0/checkpoint-108_bringup_greedy.scored.jsonl"
+
+[latex]   # python -m ggrpo.latex: the report's numbers and figures, from the [track] evals and the training logs
+out = "report/midpoint/generated"
+decontam = "results/data-survey/decontam.json"
+baseline = "gg"
+reported = { humaneval_beam8 = [74, 164], bringup_beam8 = [10, 65] }   # GG paper, Table 3 (GG-1.5B, ARMv8, O2): solved, n
+labels = { gg = "GG (ours)", grpo-seed0 = "GRPO", dsm-seed0 = "DeepSeekMath GRPO", sft-seed0 = "SFT" }
+[latex.trainer_states]
+grpo-seed0 = "results/training/full/trainer_state.json"
+dsm-seed0 = "results/training/dsm-seed0/trainer_state.json"
+sft-seed0 = "results/training/sft-seed0/trainer_state.json"

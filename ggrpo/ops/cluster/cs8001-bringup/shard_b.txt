@@ -1,0 +1,1 @@
+ackermann.s,audio-codec.s,bloom-filter.s,boyer-moore-search.s,bubble-sort.s,checkers.s,distinctness.s,flood-fill.s,frac-calc.s,gcd-list.s,graph-tests.s,hanoi.s,max-subseq.s,mersenne.s,minspan.s,murmur-hash.s,nr-solver.s,parrondo.s,pascal.s,pi-calc.s,rabinkarp-search.s,spelt2num.s,tiny-NN.s,topo-sort.s,vectors-3d.s,weekday.s

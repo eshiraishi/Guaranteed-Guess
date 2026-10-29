@@ -2,13 +2,33 @@
 
 ## Principles
 - Use library entry points over custom code. `trl grpo --config grpo.yaml` is the trainer, so there is no train.py.
-  LoRA and QLoRA differ only in `--load_in_4bit true --bnb_4bit_quant_type nf4`.
+  It trains all weights, as GG's own SFT did (model card tag `full`). QLoRA was dropped (Oct 22): TRL merges the adapter
+  into the 4-bit weights for vLLM, which rounds the update away, and generating without vLLM was 6-9x slower.
 - Our settings and paths live in `config.toml` (pydantic-settings, with CLI overrides). Library configs keep their own
   format (TRL: YAML).
 - Keep the paper's exact behavior unless the paper or the data says otherwise. Values with no source are `TODO` and stop
   the run until someone decides them.
+- Splits and reporting (decided Oct 22): MBPP-C is 90% train and 10% dev (`config.toml` `dev_fraction`, `split_seed`;
+  identical x86 stays on one side). HumanEval-C and BringUp are held out. The reported model is the final checkpoint.
+  Dev is scored offline on every saved checkpoint with the HumanEval decoding, as a learning curve and for later tuning,
+  never to pick the reported checkpoint. The 952-prompt run that ran out of memory at step 19 is the pilot.
+- Metrics (Enzo, Oct 23): report the paper's metric, pass@1 with beam 8, for reference. Sampled pass@1 under the
+  training distribution (`ops/lanes/sample_eval.py`) was run on dev only as a diagnostic: GRPO raised it (45.1% to 48.3%,
+  sign test p = 0.016) while beam 8 stayed flat (56 to 54 of 94). It is not a reported metric. Enzo (Oct 23, later):
+  it is also scored on HumanEval-C (base and final checkpoint) as a diagnostic, always after report-bound work.
+- W&B run names (Enzo, Oct 23): the name is the recipe. `GRPO` is `grpo.yaml` as is, for every seed (the seed is in the
+  run config); a variant is `GRPO (key: value)` with TRL's keys. The baseline arms are `GRPO (DeepSeekMath)`,
+  `Dr. GRPO` and `SFT`. The base model is its own run, `GG`, at step 0. Run ids are fixed by the launchers
+  (`grpo-seedN`, `dsm-seedN`, `drgrpo-seedN`, `sft-seedN`), so a relaunch continues its run. Runs from before the
+  switch to W&B (seeds 0 and 1, trained as `baseline, seed=N`) were copied from Trackio by
+  `ops/migrate/trackio_to_wandb.py`; the Trackio DB backups are kept.
 - One extraction point: the reward server applies the `config.toml` regex to raw completions, for training and for eval.
-- Tracking is Trackio in local mode: SQLite under `runs/trackio`, no server, no docker, no Hub Space. Event logs are
+- Tracking is W&B (Oct 23), chosen over Trackio because TRL's W&B callback needs no workarounds: repeated names with
+  unique ids, every argument as run config, `train/global_step` as the x-axis. Since Oct 24 (Enzo), all data goes to
+  W&B and every run, totoro included, logs straight to it; Trackio is no longer used or installed. `WANDB_API_KEY` is
+  in the gitignored `.env`, read by `Settings` and by the launcher. Evals are scored offline and logged into the
+  training run at their checkpoint step by `python -m ggrpo.track` (files listed in `config.toml` `[track]`);
+  `python -m ggrpo.report` exports every eval row to one CSV, the source for paper tables and figures. Event logs are
   structlog JSON lines.
 
 ## Facts the code relies on (checked by `ggrpo.data` and the tests)
@@ -36,6 +56,4 @@
    paper text and the beam-8, 16k-cap run: no sampling, with `repetition_penalty` 1.1.
 2. **Attention kernel.** The paper's eval used `flash_attention_2`; we use `sdpa`. Beam outputs may differ slightly.
    Check whether FA2 is available on sm_120.
-3. **The `TODO` values in `grpo.yaml`:** loss type (grpo vs dapo), LoRA r, alpha and dropout, learning rate, steps,
-   batch sizes, and `max_completion_length`.
-4. **Training subset:** `data.train_ids` stays unset until the contradicting samples are sorted out.
+3. **Training subset:** `data.train_ids` stays unset until the contradicting samples are sorted out.

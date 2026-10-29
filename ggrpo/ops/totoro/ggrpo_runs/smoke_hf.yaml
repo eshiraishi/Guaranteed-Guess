@@ -1,0 +1,67 @@
+# TRL's own config for `trl grpo --config grpo.yaml` (TrlParser: GRPOConfig + ModelConfig + dataset mixture).
+# QLoRA is the same file plus (QLoRA paper: NF4, double quantization; compute dtype = `dtype`):
+#   --load_in_4bit true --bnb_4bit_quant_type nf4 --use_bnb_nested_quant true --run_name qlora --output_dir runs/qlora
+# TODO values are undecided on purpose: TRL refuses to start instead of silently using a library default.
+# Values agreed Oct 22, 2026; LoRA sources: https://thinkingmachines.ai/blog/lora/ and TRL's "LoRA Without Regret" GRPO example.
+env:
+  TRACKIO_DIR: runs/trackio
+
+# Model
+model_name_or_path: ahmedheakl/gg-armv8-O2
+model_revision: 0444a378f384300187c7f43914fc986a81ff051a
+dtype: bfloat16
+
+# Data and reward
+datasets:
+  - path: json
+    data_files: data/train.jsonl        # written by `python -m ggrpo.data` (config.toml data.train)
+    columns: [prompt, task_id]
+reward_funcs: [ggrpo.reward.reward_pass]
+
+# LoRA
+use_peft: true
+lora_target_modules: all-linear
+lora_r: 1                               # rank 1 matches full fine-tuning in RL (LoRA Without Regret); TRL GRPO example
+lora_alpha: 32                          # TRL GRPO example
+lora_dropout: 0.0                       # TRL GRPO example passes none (PEFT default 0.0); weakly sourced
+
+# GRPO
+num_generations: 8
+loss_type: dapo                         # TRL default; normalizes over the global accumulated batch, so accumulation is exact
+beta: 0.0
+learning_rate: 5.0e-5                   # TRL GRPO + LoRA example (rank 1); LoRA is sensitive to this value
+max_steps: TODO                         # same for both arms; set from the smoke test's step time (12-15 h budget)
+per_device_train_batch_size: 8          # completions per micro-batch (memory)
+gradient_accumulation_steps: 16         # 16 prompts x 8 completions = 128 per update (reward server throughput)
+max_completion_length: 4096             # covers all but 11/952 train references; base outputs p95 = 3194 tokens
+mask_truncated_completions: true
+
+# Sampling, explicit so nothing comes from the checkpoint's generation_config.json; config.toml [generate.sample] matches
+temperature: 1.0
+top_k: 0
+top_p: 1.0
+repetition_penalty: 1.0
+
+# Generation backend
+use_vllm: true
+vllm_mode: colocate
+
+# Precision and memory
+bf16: true
+gradient_checkpointing: true
+
+# Tracking (Trackio, local only: no Space, no Bucket)
+seed: 0
+report_to: [trackio]
+project: cs8001
+run_name: lora
+trackio_space_id: null
+trackio_static_space_id: false
+output_dir: runs/lora
+logging_steps: 1
+log_completions: true
+save_steps: 25
+
+# smoke only: transformers generation (use_vllm false) prefills prompts in chunks; same result, less memory
+generation_kwargs:
+  prefill_chunk_size: 512

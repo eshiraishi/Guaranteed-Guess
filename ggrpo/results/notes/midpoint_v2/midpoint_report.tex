@@ -1,0 +1,282 @@
+\documentclass{article}
+
+\PassOptionsToPackage{numbers, compress}{natbib}
+\usepackage[preprint]{neurips_2026}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{xcolor}
+\newcommand{\placeholder}[1]{\texttt{\textcolor{blue}{[#1]}}}
+
+% Review markup. Change \trackedtrue to \trackedfalse for the submitted version:
+% added text then prints normally and deleted text disappears.
+\usepackage{soul}
+\soulregister\citep7
+\soulregister\ref7
+\colorlet{addedbg}{yellow!45}
+\sethlcolor{addedbg}
+\newif\iftracked
+\trackedtrue
+\newcommand{\added}[1]{\iftracked\hl{#1}\else#1\fi}
+\newcommand{\deleted}[1]{\iftracked\textcolor{red}{\st{#1}}\ \fi}
+\newcommand{\addedbox}[1]{\iftracked\colorbox{addedbg}{#1}\else#1\fi}
+
+\title{GRPO with QLoRA for Verified CISC-to-RISC Assembly Transpilation\\\large Mid-point Report}
+
+\author{%
+  Enzo Shiraishi Nunes da Silva \\
+  Mohammed Bin Zayed University of Artificial Intelligence \\
+  \texttt{enzo.shiraishi@mbzuai.ac.ae} \\
+  \textit{PhD in Computer Science}
+  \And
+  Sergei Pasynkov \\
+  Mohammed Bin Zayed University of Artificial Intelligence \\
+  \texttt{sergei.pasynkov@mbzuai.ac.ae} \\
+  \textit{PhD in Computer Science}
+  \And
+  Zayed Khaled Al Tamimi \\
+  Mohammed Bin Zayed University of Artificial Intelligence \\
+  \texttt{zayed.altamimi@mbzuai.ac.ae} \\
+  \textit{PhD in Computer Science}
+}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Translating assembly from one processor family to another, for example from x86 to ARM, is a practical need when software must move to new hardware. It is difficult to do by hand and difficult to guarantee. Guaranteed Guess (GG) addresses this with a language model that proposes a translation and software tests that accept or reject it \citep{gg}. In this report, we study whether the same tests can also be used to train the model, with reinforcement learning, so that it produces more translations that pass.
+
+Our earlier proposal applied DAPO to vision-language-action (VLA) models, which produce robot actions from images and instructions \citep{dapo}. We changed the topic for two reasons. First, research on VLAs is currently centered on deployment cost, namely latency and memory \citep{guan2025efficientvla,yu2025survey}. The existing reinforcement learning work for VLAs reports task success and relies on robot simulation to produce each training sample, and the feedback from these simulations is often sparse \citep{simplevlarl,vlarl,rlinfvla}. This is costly under limited compute. Second, translating assembly poses the same research question in a setting that our compute can support. The output can be checked exactly by running tests, one attempt is a single generation followed by a test run, and the model is small enough for parameter-efficient training on one GPU \citep{gg}. The problem is also practically relevant, because the translated code of this approach runs faster than Apple's Rosetta~2 \citep{gg}.
+
+The method we study is Group Relative Policy Optimization (GRPO) with a test-based reward, combined with Quantized Low-Rank Adaptation (QLoRA) to reduce memory use \citep{deepseekmath,qlora}. Supervised fine-tuning is a necessary first stage for GRPO. \deleted{Because we use the same data as GG, we start from its released checkpoint}\added{GG released the model that results from this stage, so we start from that checkpoint} instead of repeating that stage, which saves compute without changing the pipeline.
+
+The rest of this report contains a short review of related work (Section~\ref{sec:related}), the baseline we evaluate (Section~\ref{sec:baseline}), the progress and plan for our method (Section~\ref{sec:method}), and the remaining work with its distribution among the authors (Section~\ref{sec:remaining}).
+
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Reinforcement learning with verifiable rewards.}
+Reinforcement learning with verifiable rewards (RLVR) uses a program to check the answer instead of a learned reward model \citep{tulu3}. GRPO suits this setting because it compares several attempts at the same problem and does not require a separate model to predict their results \citep{deepseekmath}. The approach has given strong results on verifiable tasks such as mathematics and coding \citep{deepseekr1}, and GRPO with binary rewards has been shown to increase the success probability of the starting model \citep{mroueh2025grpo}.
+
+\paragraph{RLVR for code.}
+Code is a natural fit for RLVR because tests give an exact and inexpensive result. RLEF trains code models on the results of running their own code \citep{rlef}, and VeRPO uses partial test results as a denser reward \citep{verpo}. Recent works apply the same idea to low-level code, where the output can be executed or formally verified. SuperCoder uses reinforcement learning to produce faster assembly programs, rewarding both correctness and speed \citep{supercoder}. LLM-VeriOpt trains a small model with GRPO, using a formal verifier as the reward, to optimize compiler code \citep{veriopt}. AutoDecompiler uses compilation and test feedback to train a model that converts binaries back into source code \citep{autodecompiler}, and TRAVEL applies reinforcement learning with execution feedback to translate C code into Rust \citep{travel}. These works show that RLVR can improve code, assembly, and translation. To our knowledge, none of them applies it to translating CISC assembly into RISC assembly.
+
+\paragraph{Assembly translation.}
+Guess \& Sketch combines guesses from a language model with a solver that checks whether the translation is equivalent \citep{guesssketch}. CRT is a lightweight language model that translates x86 assembly into ARM and RISC-V \citep{crt}. GG fine-tunes small pre-trained code models (DeepSeek-Coder 1.3B and Qwen2.5-Coder 0.5B and 1.5B) on about 1.3 million C programs from AnghaBench and The Stack v2, compiled to both instruction sets. It generates candidate translations and checks them with software tests. It is evaluated on HumanEval, a set of programming problems whose C versions are translated and then executed, and on BringupBench, a set of larger programs for embedded systems \citep{gg}. In GG, the tests only accept or reject the output of the model. We use the same tests as a training signal.
+
+\paragraph{Parameter-efficient training.}
+Low-Rank Adaptation (LoRA) trains a small number of added weights instead of the whole model \citep{lora}. QLoRA does the same on top of a base model stored in 4-bit precision, which further reduces memory use \citep{qlora}. We use both so that training fits on a single GPU.
+
+\section{Baseline}
+\label{sec:baseline}
+
+Our baseline is the released GG model for ARMv8 at optimization level O2, which is Qwen2.5-Coder-1.5B-Instruct fine-tuned on the GG data \citep{gg}. We do not train it. We evaluate it with our own reward harness: the predicted ARM assembly is the only definition of the function in a test program, which is assembled, linked, and run. An empty or truncated prediction therefore fails. \deleted{This differs from the original evaluation, which compiles the C version of the function into the test binary and could let an empty prediction pass.}\added{The test programs are the ones released by the GG authors with their data.}
+
+We evaluate on the 164 HumanEval-C problems at O2 and report the pass rate, that is, the fraction of problems whose translation passes all tests. We report it under two decoding settings: beam search, as in the original evaluation, and sampling at temperature~1, which matches how the model is used during GRPO. The first setting also checks whether our harness reproduces the number reported for this model \citep{gg}.
+
+\deleted{Result pending. The harness requires the data and test programs to be built with the same compiler toolchain as the official GG data (Section~\ref{sec:method}). We will report the pass rates here once this step is complete.}
+
+\added{Table~\ref{tab:baseline} gives the results. As a check of the harness, the reference ARM assembly passes all 164 problems, and an empty prediction fails all 164. With beam search, the model solves 72 problems in our first run and 77 in a second run that uses the software versions listed with the released model, while the authors report 74.} \added{The two runs use the same decoding, and none of the problems that change between them reach the length limit, so the difference comes from the software versions alone. These versions can therefore move the result by about five problems, or 3 percentage points.} \added{For this reason, we evaluate the baseline and our trained models with the same software versions. We also found that the authors' released script turns on sampling during beam search, through the configuration file of the model, although the paper states that sampling was disabled. A run of that script is in progress.}
+
+\begin{table}[h]
+\centering
+\caption{\added{Problems solved by the released GG model at O2. BringUp results are out of the 65 programs that can be built, which matches the percentages in the GG paper. The BringUp runs use PyTorch 2.7 instead of 2.6, because our GPU requires it.}}
+\label{tab:baseline}
+\small
+\addedbox{%
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Decoding and software & HumanEval-C & BringUp \\
+\midrule
+Reported by GG \citep{gg}, beam search & 74/164 (45.1\%) & 10/65 (15.4\%) \\
+Beam search, newer versions, 16{,}000 new tokens & 72/164 (43.9\%) & -- \\
+Beam search, versions listed with the model & 77/164 (47.0\%) & \placeholder{in progress} \\
+Beam search, versions used for training & \placeholder{in progress} & -- \\
+Authors' scripts as released & \placeholder{in progress} & \placeholder{in progress} \\
+Sampling at temperature~1 & \placeholder{pending} & -- \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\section{Proposed Method}
+\label{sec:method}
+
+\paragraph{Method.}
+We apply GRPO to the GG checkpoint. For each problem, the model generates a group of eight translations. Each translation receives a reward of 1 if it passes all tests and 0 otherwise. The model is updated to favor the translations that pass relative to the rest of the group. We use the GRPO implementation in the TRL library, and we write the reward function, the data preparation, and the evaluation code ourselves. The two training variants differ only in the base weights: LoRA on a 16-bit base model, and QLoRA on a 4-bit base model. We compare both with the baseline of Section~\ref{sec:baseline}. The training problems come from MBPP-C, which has assertion tests\deleted{, and ExeBench, which has real input and output examples}. \added{Of its 973 problems that compile, we keep the 952 whose reference ARM assembly passes its own tests. We will add ExeBench, which has real input and output examples, only if more training problems are needed.} HumanEval-C is reserved for evaluation. \deleted{We expect to use 100 to 300 training steps per variant with identical settings.}\added{Both variants use identical settings and are trained for 60 steps, one pass over the training problems.}
+
+\paragraph{\added{Settings.}}
+\added{Each step uses 16 problems with eight translations each. A translation can have at most 4,096 tokens, which covers the reference translations of all but 11 training problems, and translations cut at this limit are not used in the update. The LoRA weights have rank 1 and are added to all linear layers, following results that this rank is enough for reinforcement learning} \citep{lorawithoutregret}\added{. The learning rate is} $5\times10^{-5}$\added{.} \added{We use the loss of DAPO, which averages over all tokens of the batch} \citep{dapo}\added{, and no penalty for moving away from the starting model. The 4-bit base model of QLoRA uses the NF4 format with double quantization, as in the QLoRA paper} \citep{qlora}\added{.}
+
+\paragraph{Progress.}
+The reward harness described above has been implemented. It runs on a Mac, because the GG data is ARM assembly produced by Apple's compiler and can only be assembled and run natively on Apple Silicon. The training machine is a Linux server with one NVIDIA RTX \added{PRO} 6000 Blackwell GPU\added{ with 96~GB}, which is the compute available to us, and it reaches the harness through a single network tunnel. This differs from our earlier assumption of up to two GPUs. We also prepared the code that loads the problems and the tests.
+
+\deleted{The remaining step before training is}\added{Before training, we had} to match the toolchain. The official GG data was produced with Xcode 14.3 and the macOS 13.3 SDK, while our Mac has a newer toolchain, and data regenerated with it differs from the official data. We \deleted{are therefore building}\added{therefore built} a macOS 13 virtual machine with Xcode 14.3\deleted{ and will regenerate our data and run the harness inside it}\added{, regenerated our data in it, and run the harness inside it}. We \deleted{treat}\added{treated} the work as complete when regenerated HumanEval-C output \deleted{matches}\added{matched} the official data. \deleted{This step is in progress.}\added{This step is complete: compiling the authors' C code in this machine reproduces all 328 official HumanEval-C files exactly.}
+
+\added{A first short training run of the LoRA variant works from start to end.}
+
+\paragraph{Risks.}
+The reward harness runs on a single Mac, so its throughput limits the number of training steps. We have not yet verified that updated LoRA weights are passed correctly to the fast generation engine when the base model is 4-bit. We will test this on a short run before any long training. \deleted{Some test problems overlap between datasets, and we remove duplicates before training.}\added{We have not yet checked whether the training problems overlap with the evaluation problems or with the GG training data, and we will check this before training.}
+
+\section{Remaining Work and Distribution}
+\label{sec:remaining}
+
+\begin{center}
+\begin{tabular}{p{0.22\linewidth} p{0.70\linewidth}}
+\toprule
+\textbf{Dates} & \textbf{Work} \\
+\midrule
+Oct. 24--30 & \deleted{Finish the toolchain setup, regenerate the data, report the baseline.}\added{Complete the baseline runs of Table~\ref{tab:baseline} and the short tests of both variants.} \\
+Oct. 31--Nov. 13 & \deleted{Run a short test, then train}\added{Train} the LoRA and QLoRA variants. \\
+Nov. 14--27 & Evaluate both variants, add a third baseline, run one ablation. \\
+Nov. 28--Dec. 7 & Analyze results and failures, prepare the final report and code. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The final report will compare against at least three baselines: the released GG model, the LoRA variant, and a third chosen after the first results.
+
+\deleted{Workload distribution to be completed.}\added{The team will divide the work between training the LoRA and QLoRA variants, evaluating them and the baselines, and analyzing the results for the final report.}
+
+\small
+\begin{thebibliography}{20}
+
+\bibitem{gg}
+A.~Heakl, S.~Hashmi, C.~Abi, C.~Lee, and A.~Mahmoud.
+\newblock Guaranteed Guess: A Language Modeling Approach for CISC-to-RISC Transpilation with Testing Guarantees.
+\newblock arXiv:2506.14606, 2025.
+\newblock \url{https://arxiv.org/abs/2506.14606}.
+
+\bibitem{crt}
+A.~Heakl, C.~Abi, R.~Hossam, and A.~Mahmoud.
+\newblock From CISC to RISC: Language-Model Guided Assembly Transpilation.
+\newblock arXiv:2411.16341, 2024.
+\newblock \url{https://arxiv.org/abs/2411.16341}.
+
+\bibitem{guesssketch}
+C.~Lee, A.~Mahmoud, M.~Kurek, S.~Campanoni, D.~Brooks, S.~Chong, G.-Y.~Wei, and A.~M.~Rush.
+\newblock Guess \& Sketch: Language Model Guided Transpilation.
+\newblock arXiv:2309.14396, 2023.
+\newblock \url{https://arxiv.org/abs/2309.14396}.
+
+\bibitem{guan2025efficientvla}
+W.~Guan, Q.~Hu, A.~Li, and J.~Cheng.
+\newblock Efficient Vision-Language-Action Models for Embodied Manipulation: A Systematic Survey.
+\newblock arXiv:2510.17111, 2025.
+\newblock \url{https://arxiv.org/abs/2510.17111}.
+
+\bibitem{yu2025survey}
+Z.~Yu et al.
+\newblock A Survey on Efficient Vision-Language-Action Models.
+\newblock arXiv:2510.24795, 2025.
+\newblock \url{https://arxiv.org/abs/2510.24795}.
+
+\bibitem{simplevlarl}
+H.~Li et al.
+\newblock SimpleVLA-RL: Scaling VLA Training via Reinforcement Learning.
+\newblock arXiv:2509.09674, 2025.
+\newblock \url{https://arxiv.org/abs/2509.09674}.
+
+\bibitem{vlarl}
+G.~Lu et al.
+\newblock VLA-RL: Towards Masterful and General Robotic Manipulation with Scalable Reinforcement Learning.
+\newblock arXiv:2505.18719, 2025.
+\newblock \url{https://arxiv.org/abs/2505.18719}.
+
+\bibitem{rlinfvla}
+H.~Zang et al.
+\newblock RLinf-VLA: A Unified and Efficient Framework for Reinforcement Learning of Vision-Language-Action Models.
+\newblock arXiv:2510.06710, 2025.
+\newblock \url{https://arxiv.org/abs/2510.06710}.
+
+\bibitem{dapo}
+Q.~Yu et al.
+\newblock DAPO: An Open-Source LLM Reinforcement Learning System at Scale.
+\newblock arXiv:2503.14476, 2025.
+\newblock \url{https://arxiv.org/abs/2503.14476}.
+
+\bibitem{tulu3}
+N.~Lambert et al.
+\newblock Tulu 3: Pushing Frontiers in Open Language Model Post-Training.
+\newblock arXiv:2411.15124, 2024.
+\newblock \url{https://arxiv.org/abs/2411.15124}.
+
+\bibitem{deepseekmath}
+Z.~Shao et al.
+\newblock DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models.
+\newblock arXiv:2402.03300, 2024.
+\newblock \url{https://arxiv.org/abs/2402.03300}.
+
+\bibitem{deepseekr1}
+DeepSeek-AI.
+\newblock DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning.
+\newblock Nature, 645:633--638, 2025; arXiv:2501.12948.
+\newblock \url{https://arxiv.org/abs/2501.12948}.
+
+\bibitem{mroueh2025grpo}
+Y.~Mroueh.
+\newblock Reinforcement Learning with Verifiable Rewards: GRPO's Effective Loss, Dynamics, and Success Amplification.
+\newblock arXiv:2503.06639, 2025.
+\newblock \url{https://arxiv.org/abs/2503.06639}.
+
+\bibitem{rlef}
+J.~Gehring, K.~Zheng, J.~Copet, V.~Mella, Q.~Carbonneaux, T.~Cohen, and G.~Synnaeve.
+\newblock RLEF: Grounding Code LLMs in Execution Feedback with Reinforcement Learning.
+\newblock arXiv:2410.02089, 2024.
+\newblock \url{https://arxiv.org/abs/2410.02089}.
+
+\bibitem{verpo}
+L.~Wang et al.
+\newblock Beyond Binary: Turning Partial Success into Dense Verifiable Rewards for Reinforcement Learning in Code Generation.
+\newblock arXiv:2601.03525, 2026.
+\newblock \url{https://arxiv.org/abs/2601.03525}.
+
+\bibitem{supercoder}
+A.~Wei, T.~Suresh, H.~Tan, Y.~Xu, G.~Singh, K.~Wang, and A.~Aiken.
+\newblock SuperCoder: Assembly Program Superoptimization with Large Language Models.
+\newblock arXiv:2505.11480, 2025.
+\newblock \url{https://arxiv.org/abs/2505.11480}.
+
+\bibitem{veriopt}
+X.~Fang, J.~Kang, R.~C.~Rocha, S.~Ainsworth, and L.~Mukhanov.
+\newblock LLM-VeriOpt: Verification-Guided Reinforcement Learning for LLM-Based Compiler Optimization.
+\newblock IEEE/ACM International Symposium on Code Generation and Optimization (CGO), 2026.
+\newblock \url{https://2026.cgo.org/details/cgo-2026-papers/37/LLM-VeriOpt-Verification-Guided-Reinforcement-Learning-for-LLM-Based-Compiler-Optimi}.
+
+\bibitem{autodecompiler}
+P.~Liu et al.
+\newblock Binary Decompilation LLM with Feedback-Driven Multi-Turn Refinement.
+\newblock arXiv:2606.16162, 2026.
+\newblock \url{https://arxiv.org/abs/2606.16162}.
+
+\bibitem{travel}
+F.~Luo, J.~Liu, C.~Gao, J.~Feng, and K.~Liu.
+\newblock Towards Reliable C-to-Rust Translation with Rule-Guided Reasoning and Reinforcement Learning.
+\newblock arXiv:2607.19966, 2026.
+\newblock \url{https://arxiv.org/abs/2607.19966}.
+
+\bibitem{lora}
+E.~J.~Hu et al.
+\newblock LoRA: Low-Rank Adaptation of Large Language Models.
+\newblock International Conference on Learning Representations (ICLR), 2022; arXiv:2106.09685.
+\newblock \url{https://arxiv.org/abs/2106.09685}.
+
+\bibitem{qlora}
+T.~Dettmers, A.~Pagnoni, A.~Holtzman, and L.~Zettlemoyer.
+\newblock QLoRA: Efficient Finetuning of Quantized LLMs.
+\newblock Advances in Neural Information Processing Systems (NeurIPS), 2023; arXiv:2305.14314.
+\newblock \url{https://arxiv.org/abs/2305.14314}.
+
+\bibitem{lorawithoutregret}
+J.~Schulman and Thinking Machines Lab.
+\newblock LoRA Without Regret.
+\newblock Thinking Machines Lab: Connectionism, 2025.
+\newblock \url{https://thinkingmachines.ai/blog/lora/}.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,1 @@
+anagram.s,avl-tree.s,banner.s,blake2b.s,c-interp.s,cipher.s,dhrystone.s,donut.s,fft-int.s,fuzzy-match.s,fy-shuffle.s,heapsort.s,k-means.s,kadane.s,kepler.s,knapsack.s,knights-tour.s,life.s,longdiv.s,mandelbrot.s,primal-test.s,priority-queue.s,qsort-demo.s,quaternions.s,rho-factor.s,rle-compress.s,satomi.s,shortest-path.s,simple-grep.s,spirograph.s,totient.s

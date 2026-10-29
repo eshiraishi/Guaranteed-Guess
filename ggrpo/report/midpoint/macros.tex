@@ -1,0 +1,58 @@
+% Status markup, optional blocks and result lookup. The switches are set in status.tex.
+\usepackage{etoolbox}\usepackage{array}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{pgfplots}
+\usetikzlibrary{patterns}
+% Chart colors: matplotlib's tab10 order, one fixed color per method; our runs of GG in purple, reported numbers hatched gray
+\definecolor{series1}{HTML}{1F77B4}\definecolor{series2}{HTML}{FF7F0E}\definecolor{series3}{HTML}{2CA02C}
+\definecolor{series4}{HTML}{D62728}\definecolor{series5}{HTML}{8C564B}
+\definecolor{ggours}{HTML}{9467BD}
+\pgfplotsset{compat=1.18}
+
+\newbool{submit}
+\newtoggle{dsm}             % GRPO (DeepSeekMath) seed 0
+\newtoggle{sft}             % SFT on the MBPP-C train problems
+\newtoggle{bringupTrained}  % BringUp of the trained checkpoints
+\newtoggle{figTrain}        % Figure: training curves
+\newtoggle{figDev}          % Figure: dev across checkpoints
+
+% Draft colors; the submitted version prints everything in black.
+\newcommand{\statuscolor}[2]{\ifbool{submit}{#2}{\textcolor{#1}{#2}}}
+\newcommand{\pending}[1]{\statuscolor{orange}{#1}}  % waits for a run tonight
+\newcommand{\todo}[1]{\statuscolor{red}{#1}}        % needs a person: names, wording, a decision
+\newcommand{\hand}[1]{\statuscolor{violet}{#1}}     % typed by hand, not yet checked against the result files
+
+% generated/numbers.tex defines \resdef{run/step/metric/stat}{value}. A missing value prints an orange ?? and a
+% "Missing result" warning, which ops/report.sh lists and treats as an error in the submitted version.
+\newcommand{\resdef}[2]{\csdef{res@#1}{#2}}
+\newcommand{\res}[1]{\ifcsdef{res@#1}{\csuse{res@#1}}{\pending{??}\PackageWarning{results}{Missing result #1}}}
+\newcommand{\ifres}[3]{\ifcsdef{res@#1}{#2}{#3}}
+% \resdash{key}: as \res, but the submitted version prints -- for a missing value (a cell whose eval is still running)
+\newcommand{\resdash}[1]{\ifbool{submit}{\ifres{#1}{\res{#1}}{--}}{\res{#1}}}
+
+% \optional{toggle}{key}{content}: shown when the toggle is on. The submitted version also requires a result for key,
+% so a row or block whose run did not finish disappears on its own.
+\newcommand{\optional}[3]{\iftoggle{#1}{\ifbool{submit}{\ifres{#2}{#3}{}}{#3}}{}}
+
+% Changes against the version approved at 21:35 GST: green background = added, red background
+% and struck = deleted. \togglefalse{tracked} prints added text plainly and drops deletions; ops/report.sh refuses a
+% submitted build with the marks on.
+\usepackage[normalem]{ulem}
+\newtoggle{tracked}
+\newcommand{\iftracking}[2]{\iftoggle{tracked}{#1}{#2}}
+\newcommand{\addedmark}{\bgroup\markoverwith{\textcolor{green!30}{\rule[-0.6ex]{2pt}{2.5ex}}}\ULon}
+\newcommand{\deletedmark}{\bgroup\markoverwith{\rlap{\textcolor{red!22}{\rule[-0.6ex]{2pt}{2.5ex}}}%
+  \textcolor{red!75!black}{\rule[0.5ex]{2pt}{0.6pt}}}\ULon}
+% ulem fails when a hyperlinked citation or reference breaks across lines, so tracked text boxes them whole
+\newcommand{\boxlinks}{\let\ULcitep\citep\let\ULcitet\citet\let\ULref\ref
+  \renewcommand{\citep}[1]{\mbox{\ULcitep{##1}}}\renewcommand{\citet}[1]{\mbox{\ULcitet{##1}}}\renewcommand{\ref}[1]{\mbox{\ULref{##1}}}}
+\DeclareRobustCommand{\added}[1]{\iftracking{\leavevmode{\boxlinks\addedmark{#1}}}{#1}}
+\DeclareRobustCommand{\deleted}[1]{\iftracking{\leavevmode{\boxlinks\color{red!60!black}\deletedmark{#1}}}{}}
+\DeclareRobustCommand{\addedbox}[1]{\iftracking{\colorbox{green!18}{#1}}{#1}}   % tables, figures, headings
+\DeclareRobustCommand{\deletedbox}[1]{\iftracking{\colorbox{red!15}{#1}}{}}   % a removed table: shown on red in the draft only
+
+\newcommand{\draftlegend}{\ifbool{submit}{}{
+  \begin{center}\fbox{\parbox{0.92\linewidth}{\small\textbf{Draft.} Black: generated from result files.
+  \pending{Orange: waits for a run tonight.} \todo{Red: needs a person.} \hand{Purple: typed by hand, to check.}
+  Changes against the 21:35 version: \added{added} \deleted{deleted}. Switches in \texttt{status.tex}.}}\end{center}}}

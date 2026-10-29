@@ -5,7 +5,6 @@ import time
 import polars as pl
 import structlog
 import torch
-from peft import PeftModel
 from pydantic_settings import CliApp
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, set_seed
 
@@ -22,11 +21,15 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation=settings.generate.attn_implementation,
     device_map=settings.generate.device,
 )
-if settings.generate.adapter:
-    model = PeftModel.from_pretrained(model, settings.generate.adapter)
+# GG uses rope_theta 1e6. Checkpoints saved by transformers >= 5 store it under rope_parameters, which 4.x silently
+# ignores (theta 1e4, wrong logits, no warning): fail loudly on any loader that gets it wrong.
+inv_freq = float(model.model.rotary_emb.inv_freq[1])
+assert abs(inv_freq - 1e6 ** (-2 / 128)) < 5e-3, f"rope_theta is not 1e6 (inv_freq[1] = {inv_freq})"
 
 settings.generate.out.parent.mkdir(parents=True, exist_ok=True)
-done = pl.read_ndjson(settings.generate.out)["task_id"] if settings.generate.out.exists() else pl.Series(dtype=pl.String)
+out = settings.generate.out
+# a crash before the first row leaves an empty file, which polars can't read
+done = pl.read_ndjson(out)["task_id"] if out.exists() and out.stat().st_size else pl.Series(dtype=pl.String)
 with settings.generate.out.open("a") as f:
     for task in pl.read_ndjson(settings.data.eval).filter(~pl.col("task_id").is_in(done.implode())).to_dicts():
         inputs = tokenizer(

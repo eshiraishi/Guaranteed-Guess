@@ -1,14 +1,14 @@
-# ggrpo: GRPO + (Q)LoRA on Guaranteed Guess (x86 → ARMv8 O2)
+# ggrpo: full-parameter GRPO on Guaranteed Guess (x86 → ARMv8 O2)
 
 Starts from the released `ahmedheakl/gg-armv8-O2`. Each completion gets a binary reward: 1 if its ARM assembly
 assembles, links, and passes the task's tests in a macOS 13 VM with GG's toolchain, 0 otherwise. Training is TRL's own
-`trl grpo` CLI. The settings and paths are in `config.toml`; TRL's settings are in `grpo.yaml`.
+`trl grpo` CLI, training all weights (fp32 master weights, bf16 compute), as GG's own SFT did. The settings and paths are in `config.toml`; TRL's settings are in `grpo.yaml`.
 
 ## Layout
 | Path | What |
 |---|---|
 | `config.toml` | all ggrpo settings and paths; any key can be overridden with `--section.key value` |
-| `grpo.yaml` | TRL config for `trl grpo --config grpo.yaml` (`TODO` values must be decided before a run) |
+| `grpo.yaml` | TRL config for `trl grpo --config grpo.yaml` (a `TODO` value stops the run until it is decided) |
 | `src/ggrpo/build.py` | builds `data/mbpp_armv8_O2.parquet` in the VM: MBPP-C → x86/arm with GG's commands, validated by the harness |
 | `src/ggrpo/data.py` | builds `data/train.jsonl` (MBPP-C O2) and `data/eval.jsonl` (HumanEval-C O2: GG's bench + the authors' tests) |
 | `src/ggrpo/harness.py` | assemble → link with the C test driver → run sandboxed → verdict |
@@ -19,6 +19,7 @@ assembles, links, and passes the task's tests in a macOS 13 VM with GG's toolcha
 | `src/ggrpo/paper.py` | runs the released `eval/eval_huamaneval.py` (seeded; optionally `do_sample=False`) in the model-card environment |
 | `src/ggrpo/equivalence.py` | log-probs of fixed completions, to compare package environments and attention kernels |
 | `docs/toolchain.md` | VM toolchain, data provenance, and the superseded LLM4Decompile HumanEval findings |
+| `docs/experiments.md` | RLVR experiment design (Oct 23, not started): control, phases, evidence, the code each phase needs |
 
 ## Machines and commands (run everything from this directory)
 ```bash
@@ -34,18 +35,19 @@ ssh -N -R 8765:$(tart ip gg-ventura):8765 totoro.mbzu.ae
 
 # totoro (RTX 6000 Blackwell)
 uv sync --extra train
-uv run trl grpo --config grpo.yaml                                     # LoRA
-uv run trl grpo --config grpo.yaml --load_in_4bit true --bnb_4bit_quant_type nf4 \
-    --run_name qlora --output_dir runs/qlora                           # QLoRA
-uv run python -m ggrpo.generate --generate.adapter runs/lora --generate.out runs/lora/beam_search.jsonl
-uv run python -m ggrpo.score --score.predictions runs/lora/beam_search.jsonl --score.out runs/lora/beam_search.scored.jsonl
+uv run trl grpo --config grpo.yaml
+uv run python -m ggrpo.generate --generate.model runs/full --generate.out runs/full/beam_search.jsonl
+uv run python -m ggrpo.score --score.predictions runs/full/beam_search.jsonl --score.out runs/full/beam_search.scored.jsonl
 ```
 - **Reference preflight** (defines the reference-valid set; all 164 with the authors' tests):
   `uv run python -m ggrpo.score --score.predictions data/eval.jsonl --score.column arm_ref --score.out runs/preflight/eval_ref.jsonl`
 - **Logs:** JSON lines on stderr and in `runs/ggrpo.jsonl`. Read them with `hl -F runs/ggrpo.jsonl` in a tmux pane,
   or pipe a command through `| hl -P`.
-- **Training curves (Trackio, local only):**
-  `ssh -L 7860:127.0.0.1:7860 totoro.mbzu.ae 'cd ggrpo && TRACKIO_DIR=runs/trackio uv run trackio show --project cs8001'`
+- **Tracking (W&B, `assembly-transpilation/rlvr`):** all data goes to W&B, and every run, totoro included, logs straight
+  to it (Oct 24). The launchers fix the run ids (`grpo-seedN`, `dsm-seedN`, `drgrpo-seedN`, `sft-seedN`); the run name is
+  the recipe and the seed is in the run config. Put `WANDB_API_KEY=...` in `.env` (gitignored). Training logs itself;
+  evals are listed in `config.toml` `[track]` and logged with `uv run python -m ggrpo.track` (rerunnable);
+  `uv run python -m ggrpo.report` writes every eval row to `results/paper/evals.csv`.
 - **Tests:** `uv run pytest`. `tests/test_harness.py` is authoritative only inside the VM.
 
 ## Verified (Oct 22, 2026)

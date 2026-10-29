@@ -5,6 +5,7 @@ from typing import get_args
 
 import httpx
 import structlog
+from tenacity import Retrying, retry_if_exception_type, stop_after_delay, wait_exponential
 from transformers import TrainerState
 
 from ggrpo.harness import Verdict
@@ -24,12 +25,22 @@ def reward_pass(
     log_metric: Callable[[str, float], None],
 ) -> list[float]:
     """The parameters are exactly what trl's GRPOTrainer passes; task_id is the only extra dataset column."""
-    results = httpx.post(
-        str(settings.server.url),
-        json=[{"task_id": task, "completion": completion[0]["content"]}
-              for task, completion in zip(task_id, completions, strict=True)],
-        timeout=None,
-    ).raise_for_status().json()   # 404/503 stop the run
+    items = [{"task_id": task, "completion": completion[0]["content"]}
+             for task, completion in zip(task_id, completions, strict=True)]
+    # Wait out an unreachable server (the SSH tunnel to the Mac VM) instead of crashing; scoring is a pure function of
+    # the items, so resending is safe. HTTP errors (404/503) are not transport errors and still stop the run.
+    for attempt in Retrying(
+        retry=retry_if_exception_type(httpx.TransportError),
+        wait=wait_exponential(max=60),
+        stop=stop_after_delay(settings.server.outage_seconds),
+        before_sleep=lambda state: log.warning("reward server unreachable", step=trainer_state.global_step,
+                                               attempt=state.attempt_number, error=repr(state.outcome.exception())),
+        reraise=True,
+    ):
+        with attempt:
+            results = httpx.post(
+                str(settings.server.url), json=items, timeout=settings.server.timeout
+            ).raise_for_status().json()
     verdicts = [result["verdict"] for result in results]
     log_extra("verdict", verdicts)
     for verdict in get_args(Verdict):

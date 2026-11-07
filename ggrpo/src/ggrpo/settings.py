@@ -82,6 +82,8 @@ class Codenet(BaseModel):
     solutions: Path
     built: Path                # directory of parquet parts written by the VM build
     chunk: int                 # solutions per part
+    tasks: dict[str, Path]     # RL task file of each split
+    cap: dict[str, int]        # tasks per problem in each split
 
 
 class Decoding(BaseModel):

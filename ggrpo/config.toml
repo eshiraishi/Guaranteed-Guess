@@ -67,6 +67,9 @@ problems = "data/codenet/problems.parquet"
 solutions = "data/codenet/solutions.parquet"
 built = "data/codenet/built"   # python -m ggrpo.codenet_build (VM): x86, arm and reference verdicts, in parts
 chunk = 5000                   # solutions per part
+# python -m ggrpo.codenet_tasks (after the build): RL task files, and tasks per problem in each (plan 06 D-2: k = 10)
+tasks = { train = "data/codenet/train.jsonl", val = "data/codenet/val.jsonl", test = "data/codenet/test.jsonl" }
+cap = { train = 10, val = 1, test = 1 }
 
 [generate]
 model = "ahmedheakl/gg-armv8-O2"

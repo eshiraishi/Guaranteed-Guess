@@ -121,6 +121,7 @@ The efficiency objective (X-3) goes into P1 if it works and is ablated there, wi
 | 4 | Framework for confirmatory runs | one-day bake-off, TRL vs one async framework | [02](02-harness.md) §2 |
 | 5 | Compiler for RISC-V: clang everywhere, plus a GCC rebuild of GG's RISC-V bench for comparability | approve | [02](02-harness.md) §3.2 |
 | 6 | Pre-registration before Phase E | yes, `prereg.md` in this folder | [05](05-statistics.md) §7 |
+| 7 | Base model, one only (resources allow a single model) | Qwen2.5-Coder-1.5B-Instruct for comparability with GG; Granite 4.0 1B Base if the main claim is the RL gain. Decide before the first training run | [06](06-schedule.md) B-0 |
 
 ## 6. First steps (no GPU needed)
 1. Instrument the step-time split and the cache hit rate (A-7).

@@ -64,6 +64,8 @@ sweep. "Gate" means a written decision rule checked before the next phase starts
 
   These predict post-RL results better than SFT pass@1 [V]. Also report beam-8.
 - **Keep the top two.** Qwen2.5-Coder-1.5B-Instruct is always kept as one of them, for comparability with GG.
+- **Gate (Enzo, Nov 7):** resources allow one base, not two. Pick it before the first training run:
+  Qwen2.5-Coder-1.5B-Instruct (GG comparability) or Granite 4.0 1B Base (non-Qwen, Oct 2025, Apache-2.0).
 
 ### B-1. SFT recipe sweep, on the best base and the 200k subset (1 seed each)
 | Knob | Values | Reason |

@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 
 from ggrpo.build import Task
-from ggrpo.harness import check, check_stdio
+from ggrpo.harness import check, check_stdio, check_task
 from ggrpo.settings import Settings
 
 settings = Settings()
@@ -49,3 +49,8 @@ def test_check_stdio(c, verdict):
 @pytest.mark.parametrize(("asm", "verdict"), [("", "empty"), ("\t.text\n", "link_err")])   # no main
 def test_check_stdio_failures(asm, verdict):
     assert check_stdio(asm, tests).verdict == verdict
+
+
+def test_check_task_dispatches_on_the_grader():
+    assert check_task(task["arm_ref"], task["driver"], None).passed
+    assert check_task(Task.compile(add, settings.build.arm), None, tests).passed

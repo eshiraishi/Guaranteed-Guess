@@ -35,6 +35,7 @@ class Server(BaseModel):
     url: HttpUrl
     timeout: float
     outage_seconds: float
+    tasks: list[Path]                   # task files (jsonl) whose task ids the server scores
 
 
 class Harness(BaseModel):

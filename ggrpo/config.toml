@@ -35,6 +35,8 @@ workers = 8
 url = "http://127.0.0.1:8765/score"   # as seen from totoro, through the SSH tunnel
 timeout = 1200                        # s per scoring request; worst case is 128 completions / 8 workers x (30 + 10) s = 640 s
 outage_seconds = 43200                # training waits this long for an unreachable server, logging each retry, then stops
+tasks = ["data/train.jsonl", "data/dev.jsonl", "data/eval.jsonl",   # every file must exist: the server scores these
+         "data/codenet/train.jsonl", "data/codenet/val.jsonl", "data/codenet/test.jsonl"]
 
 [harness]
 cc = ["clang", "-arch", "arm64", "-w"]

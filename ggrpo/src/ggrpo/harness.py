@@ -95,6 +95,11 @@ def check_stdio(asm: str, tests: list[dict[str, str]]) -> Result:
     return Result(verdict="pass", seconds=time.monotonic() - start)
 
 
+def check_task(asm: str, driver: str | None, tests: list[dict[str, str]] | None) -> Result:
+    """A task has either a C test driver (MBPP-C, HumanEval-C) or stdio tests (CodeNet)."""
+    return check(asm, driver) if driver is not None else check_stdio(asm, tests)
+
+
 def check(asm: str, driver: str) -> Result:
     start = time.monotonic()
     if not asm.strip():

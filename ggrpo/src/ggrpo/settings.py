@@ -18,6 +18,7 @@ class Data(BaseModel):
     sft_exclude: list[str] = []
     dev_fraction: float
     split_seed: int
+    exclude: list[str]                  # MBPP-C task ids dropped from train and dev after the split
     eval: Path
 
 

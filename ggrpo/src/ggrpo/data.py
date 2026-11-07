@@ -20,6 +20,10 @@ dev_x86 = (
     mbpp["x86"].unique(maintain_order=True).sample(fraction=settings.data.dev_fraction, seed=settings.data.split_seed)
 ).implode()
 train, dev = mbpp.filter(~pl.col("x86").is_in(dev_x86)), mbpp.filter(pl.col("x86").is_in(dev_x86))
+missing = set(settings.data.exclude) - set(mbpp["task_id"])
+if missing:
+    raise ValueError(f"data.exclude names tasks that are not in the pool: {sorted(missing)}")
+train, dev = (frame.filter(~pl.col("task_id").is_in(settings.data.exclude)) for frame in (train, dev))
 
 # gg-bench file eval/problem{n}/code.c is humaneval/{n-1}; its tests come from the authors' asmbench_source, by file
 humaneval = (

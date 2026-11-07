@@ -14,6 +14,10 @@ sft_exclude = ["mbpp/38"]            # 18,297 tokens with the chat template, ove
                                      # training context): dropped from SFT rather than truncated (Enzo, Oct 23)
 dev_fraction = 0.1                    # of distinct MBPP-C x86 programs, so identical prompts stay on one side
 split_seed = 0
+# MBPP-C twins of HumanEval problems (results/data-survey/decontam.json): dropped after the split, so the other tasks
+# keep run 1's train/dev sides (Enzo, Nov 6)
+exclude = ["mbpp/1", "mbpp/31", "mbpp/32", "mbpp/67", "mbpp/98", "mbpp/499", "mbpp/556", "mbpp/604", "mbpp/686",
+           "mbpp/754", "mbpp/812", "mbpp/872", "mbpp/957"]
 eval = "data/eval.jsonl"
 
 [prompt]   # eval/eval_huamaneval.py, verbatim

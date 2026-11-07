@@ -42,6 +42,59 @@ def set_limits() -> None:
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 
+def link(work: Path, asm: str, objects: list[Path], start: float) -> Result | None:
+    """Assemble work/pred.s and link it with objects into work/a.out: the failure, or None when a.out was built."""
+    (work / "pred.s").write_text(asm + "\n")
+    for failure, cmd in [
+        ("assemble_err", [*settings.harness.asm, "pred.s", "-o", "pred.o"]),
+        ("link_err", [*settings.harness.cc, "pred.o", *objects, "-o", "a.out", *settings.harness.ldflags]),
+    ]:
+        try:
+            p = run(cmd, cwd=work, timeout=settings.harness.build_timeout)
+        except subprocess.TimeoutExpired:
+            return Result(verdict=failure, stderr="timeout", seconds=time.monotonic() - start)
+        if p.returncode:
+            return Result(verdict=failure, returncode=p.returncode, stderr=p.stderr[-settings.harness.stderr_tail:],
+                          seconds=time.monotonic() - start)
+    return None
+
+
+def execute(work: Path, stdin: str | None = None) -> subprocess.CompletedProcess | None:
+    """Run work/a.out sandboxed, with the resource limits; None when it hits the wall-clock timeout."""
+    try:
+        return run(["sandbox-exec", "-f", settings.harness.sandbox.resolve(), "-D", f"WORKDIR={work}", "./a.out"],
+                   cwd=work, timeout=settings.harness.run_timeout, preexec_fn=set_limits, input=stdin)
+    except subprocess.TimeoutExpired:
+        return None
+
+
+def normalize(text: str) -> str:
+    """Output as judges compare it: trailing whitespace of every line and of the whole text is ignored."""
+    return "\n".join(line.rstrip() for line in text.rstrip().splitlines())
+
+
+def check_stdio(asm: str, tests: list[dict[str, str]]) -> Result:
+    """stdio mode: the prediction is a whole program (it defines main) and is linked alone. It passes when its stdout
+    equals each test's output up to trailing whitespace. The exit status is ignored, as for a main without a return;
+    a signal is a crash. Test inputs are stored stripped, so each gets its final newline back."""
+    start = time.monotonic()
+    if not asm.strip():
+        return Result(verdict="empty")
+    with tempfile.TemporaryDirectory(prefix="gg-run-") as tmp:
+        work = Path(tmp).resolve()
+        if failure := link(work, asm, [], start):
+            return failure
+        for test in tests:
+            p = execute(work, test["input"] + "\n")
+            if p is None:
+                return Result(verdict="timeout", seconds=time.monotonic() - start)
+            if p.returncode < 0 or normalize(p.stdout) != normalize(test["output"]):
+                signalled = "timeout" if -p.returncode == signal.SIGXCPU else "crash"
+                return Result(verdict="wrong_output" if p.returncode >= 0 else signalled, returncode=p.returncode,
+                              stderr=p.stderr[-settings.harness.stderr_tail:], seconds=time.monotonic() - start)
+    return Result(verdict="pass", seconds=time.monotonic() - start)
+
+
 def check(asm: str, driver: str) -> Result:
     start = time.monotonic()
     if not asm.strip():
@@ -64,23 +117,11 @@ def check(asm: str, driver: str) -> Result:
 
     with tempfile.TemporaryDirectory(prefix="gg-run-") as tmp:
         work = Path(tmp).resolve()
-        (work / "pred.s").write_text(asm + "\n")
-        for failure, cmd in [
-            ("assemble_err", [*settings.harness.asm, "pred.s", "-o", "pred.o"]),
-            ("link_err", [*settings.harness.cc, "pred.o", driver_object, "-o", "a.out", *settings.harness.ldflags]),
-        ]:
-            try:
-                p = run(cmd, cwd=work, timeout=settings.harness.build_timeout)
-            except subprocess.TimeoutExpired:
-                return Result(verdict=failure, stderr="timeout", seconds=time.monotonic() - start)
-            if p.returncode:
-                return Result(verdict=failure, returncode=p.returncode, stderr=p.stderr[-settings.harness.stderr_tail:],
-                              seconds=time.monotonic() - start)
-        try:
-            p = run(["sandbox-exec", "-f", settings.harness.sandbox.resolve(), "-D", f"WORKDIR={work}", "./a.out"],
-                    cwd=work, timeout=settings.harness.run_timeout, preexec_fn=set_limits)
-        except subprocess.TimeoutExpired:
-            return Result(verdict="timeout", seconds=time.monotonic() - start)
+        if failure := link(work, asm, [driver_object], start):
+            return failure
+        p = execute(work)
+    if p is None:
+        return Result(verdict="timeout", seconds=time.monotonic() - start)
 
     match p.returncode:
         case 0:

@@ -33,6 +33,10 @@ paper = [
     "torch==2.6.0",
     "transformers==4.50.0",
 ]
+data = [
+    "huggingface-hub==1.33.0",
+    "lxml==6.1.3",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
@@ -45,7 +49,8 @@ dev = [
 
 [tool.uv]
 # paper: the versions on the gg-armv8-O2 model card (to reproduce the paper); train: the modern TRL stack.
-conflicts = [[{ extra = "paper" }, { extra = "train" }]]
+# data (Mac data prep) shares train's huggingface-hub >= 1.0, which paper's tokenizers 0.21 rules out.
+conflicts = [[{ extra = "paper" }, { extra = "train" }], [{ extra = "paper" }, { extra = "data" }]]
 
 [tool.uv.sources]
 flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.6cxx11abiFALSE-cp312-cp312-linux_x86_64.whl" }

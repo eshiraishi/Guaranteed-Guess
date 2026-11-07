@@ -56,6 +56,18 @@ opt = "-O2"
 workers = 8
 out = "data/mbpp_armv8_O2.parquet"
 
+[codenet]   # python -m ggrpo.codenet (Mac, --extra data): CodeNet's accepted C x the sample cases in its statements
+submissions = { repo = "iNeil77/CodeNet", revision = "1e28cfa9f8eb2df763ad2514af11afd6e92dd07a", files = "C/*.parquet" }
+metadata = { repo = "Elfsong/codenet_metadata", revision = "b0e26431ba12f23ce6a4e4baf50980407cedcf54", files = "data/*.parquet" }
+aoj_language = "C"         # CodeNet original_language of Aizu C submissions; AtCoder's are "C (GCC ...)"
+min_outputs = 2            # an RL problem needs this many distinct sample outputs, so a constant program cannot pass
+split = { train = 0.6, val = 0.2, test = 0.2 }   # Enzo, Nov 7: "we need 20/20", by problem
+seed = "codenet-2026-11-07"   # salt of the split ranking: never change it once the test split has been used
+problems = "data/codenet/problems.parquet"
+solutions = "data/codenet/solutions.parquet"
+built = "data/codenet/built"   # python -m ggrpo.codenet_build (VM): x86, arm and reference verdicts, in parts
+chunk = 5000                   # solutions per part
+
 [generate]
 model = "ahmedheakl/gg-armv8-O2"
 revision = "0444a378f384300187c7f43914fc986a81ff051a"

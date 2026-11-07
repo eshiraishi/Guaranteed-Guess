@@ -59,6 +59,31 @@ class Build(BaseModel):
     out: Path
 
 
+class HubDataset(BaseModel):
+    """A Hugging Face dataset pinned to a commit; download() returns its local snapshot in the shared HF cache."""
+    repo: str
+    revision: str
+    files: str   # glob of the files used
+
+    def download(self) -> Path:
+        from huggingface_hub import snapshot_download
+        return Path(snapshot_download(self.repo, repo_type="dataset", revision=self.revision,
+                                      allow_patterns=self.files))
+
+
+class Codenet(BaseModel):
+    submissions: HubDataset    # accepted C submissions (CodeNet, C subset)
+    metadata: HubDataset       # statements, with every sample case, and titles
+    aoj_language: str          # CodeNet original_language of Aizu C submissions
+    min_outputs: int           # distinct sample outputs an RL problem needs
+    split: dict[str, float]    # fractions of the RL problems, by problem (approximate: hashed per problem)
+    seed: str                  # salt of the sha256 ranking that assigns the split
+    problems: Path
+    solutions: Path
+    built: Path                # directory of parquet parts written by the VM build
+    chunk: int                 # solutions per part
+
+
 class Decoding(BaseModel):
     num_beams: int
     do_sample: bool
@@ -139,6 +164,7 @@ class Settings(BaseSettings):
     server: Server
     harness: Harness
     build: Build
+    codenet: Codenet
     generate: Generate
     score: Score
     paper: Paper

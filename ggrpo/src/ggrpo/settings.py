@@ -120,6 +120,9 @@ class Decontam(BaseModel):
 
 
 class Sft(BaseModel):
+    max_prompt_tokens: int
+    max_answer_tokens: int     # answer in GG's answer format
+    max_bytes: int             # longest text that can fit those caps
     train: Path
     val: Path
 

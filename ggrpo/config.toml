@@ -109,6 +109,9 @@ out = "data/sft/decontam.parquet"
 items = "data/sft/decontam_items.parquet"
 
 [sft]   # python -m ggrpo.sft (Mac, --extra data, after ggrpo.decontam): TRL prompt-completion parquet
+max_prompt_tokens = 16256    # Enzo, Nov 8: 16,384 per side, as [rl]
+max_answer_tokens = 16320
+max_bytes = 2088960          # 16,320 tokens x 128 bytes, the longest token in the vocabulary
 train = "data/sft/train.parquet"
 val = "data/sft/val.parquet"
 

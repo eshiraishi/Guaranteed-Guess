@@ -107,6 +107,18 @@ batch = 1000                 # documents per worker task; each file waits for it
 out = "data/sft/decontam.parquet"
 items = "data/sft/decontam_items.parquet"
 
+[sft]   # python -m ggrpo.sft (Mac, --extra data, after ggrpo.decontam): TRL prompt-completion parquet
+train = "data/sft/train.parquet"
+val = "data/sft/val.parquet"
+
+[rl]   # python -m ggrpo.rl (Mac, --extra data, after ggrpo.decontam): the GRPO train file read by grpo_codenet.yaml
+sources = ["data/train.jsonl", "data/codenet/train.jsonl"]
+tokenizer = "ahmedheakl/gg-armv8-O2"   # the base model's tokenizer (Qwen2.5-Coder; Granite counts ~8% fewer tokens)
+tokenizer_revision = "0444a378f384300187c7f43914fc986a81ff051a"
+max_prompt_tokens = 16256    # Enzo, Nov 7: 16,384 per side; 128 left for the chat template, so prompt + completion fits
+max_answer_tokens = 16320    # grpo_codenet.yaml's 32,768 (the base's positions) with EOS; ~97% of CodeNet problems keep a task
+out = "data/rl/train.jsonl"
+
 [generate]
 model = "ahmedheakl/gg-armv8-O2"
 revision = "0444a378f384300187c7f43914fc986a81ff051a"

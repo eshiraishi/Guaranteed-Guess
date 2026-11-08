@@ -118,6 +118,20 @@ class Decontam(BaseModel):
     items: Path                # per eval item, which rules could check it
 
 
+class Sft(BaseModel):
+    train: Path
+    val: Path
+
+
+class Rl(BaseModel):
+    sources: list[Path]        # task files whose tasks GRPO trains on
+    tokenizer: str             # HF model repo of the base model's tokenizer
+    tokenizer_revision: str
+    max_prompt_tokens: int
+    max_answer_tokens: int     # reference answer, in GG's answer format
+    out: Path
+
+
 class Decoding(BaseModel):
     num_beams: int
     do_sample: bool
@@ -200,6 +214,8 @@ class Settings(BaseSettings):
     build: Build
     codenet: Codenet
     decontam: Decontam
+    sft: Sft
+    rl: Rl
     generate: Generate
     score: Score
     paper: Paper

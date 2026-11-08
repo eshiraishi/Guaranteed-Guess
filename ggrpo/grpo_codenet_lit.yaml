@@ -1,0 +1,65 @@
+# TRL's config for `trl grpo --config grpo_codenet_lit.yaml`: grpo_codenet.yaml with the starting values from published
+# runs (report "GRPO starting values from literature", Nov 7, 2026). Lines that differ from grpo_codenet.yaml say so,
+# with their source. The config gate (docs/paper-plan/06-schedule.md C-0) decides between the two files.
+# Left out on purpose: epsilon_high (DAPO's clip-higher) has no effect here, because one on-policy update per rollout
+# batch keeps the ratio at exactly 1; the offline 1-7-of-8 pass-rate filter is a data step and needs the SFT checkpoint.
+# Random-reward control (Spurious Rewards, Shao et al., ICML 2026), the same file with:
+#   --reward_funcs ggrpo.reward.reward_random --run_name "<run_name below, plus: reward_funcs: reward_random>"
+env:
+  WANDB_ENTITY: assembly-transpilation  # transformers' W&B callback reads both from here (config.toml [track])
+  WANDB_PROJECT: rlvr
+  HF_HUB_OFFLINE: "1"                   # vLLM loads the repo id without a revision: use the cached snapshot
+
+# Model
+model_name_or_path: TODO                # the base-model gate (docs/paper-plan/06-schedule.md B-0); grpo.yaml: GG's checkpoint
+model_revision: TODO
+dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as GG's bf16 mixed-precision SFT
+cast_lm_head_to_fp32: true              # differs: LM head outside autocast in the trainer (ScaleRL, ICLR 2026; MiniMax-M1); vLLM's stays bf16
+
+# Data and reward
+datasets:
+  - path: json
+    data_files: data/rl/train.jsonl     # written by `python -m ggrpo.rl` (MBPP-C + CodeNet train, decontaminated)
+    columns: [prompt, task_id]
+reward_funcs: [ggrpo.reward.reward_pass]   # binary all-tests reward (SuperCoder, COLM 2026; pass-rate study, arXiv 2605.02944)
+
+# GRPO
+num_generations: 8
+loss_type: dapo                         # TRL default; normalizes over the global accumulated batch, so accumulation is exact
+beta: 0.0
+learning_rate: 1.0e-6
+lr_scheduler_type: constant_with_warmup # differs: constant 1e-6 after a linear warmup (DAPO, NeurIPS 2025: 20 steps); grpo_codenet.yaml decays to 0
+warmup_steps: 10                        # differs: the RL-v1 value in docs/paper-plan/06-schedule.md
+max_steps: 500                          # differs: extend while dev rises (Lite PPO, ICLR 2026: 500 steps); grpo_codenet.yaml: TODO
+per_device_train_batch_size: 1          # sequences up to 32k tokens (grpo.yaml: 8 OOMed at 4k); UNTESTED: memory pilot on the longest batch first
+gradient_accumulation_steps: 256        # differs: 32 prompts x 8 completions = 256 per update (grpo_codenet.yaml: 16 x 8)
+max_completion_length: 16384            # config.toml rl.max_answer_tokens + EOS margin; ~97% of CodeNet problems kept
+mask_truncated_completions: false       # differs: a truncated answer is always wrong, so it keeps its reward-0 gradient (Skywork-OR1 §3.2.3); pilot arm: true
+vllm_max_model_length: 32768            # the base's max_position_embeddings; rl.max_prompt_tokens leaves room for the template
+vllm_importance_sampling_correction: true   # TRL default, explicit: weight 0 for completions whose sequence-level
+vllm_importance_sampling_mode: sequence_mask  # trainer/vLLM probability ratio is above clip_max (run 1: in 51 of 106 steps,
+vllm_importance_sampling_clip_max: 3.0      # at least one completion); check sampling/importance_sampling_ratio/* in the pilot
+
+# Sampling, explicit so nothing comes from the checkpoint's generation_config.json; config.toml [generate.sample] matches
+temperature: 1.0
+top_k: 0
+top_p: 1.0
+repetition_penalty: 1.0
+
+# Generation backend
+use_vllm: true
+vllm_mode: colocate
+
+# Precision and memory
+bf16: true
+gradient_checkpointing: true
+
+# Tracking (W&B; WANDB_API_KEY from .env, see ops/lanes/full_seed.sh): every argument here, seed included, becomes
+# run config. The name is the recipe: "GRPO" is grpo.yaml as is; a variant is "GRPO (key: value)" with TRL's keys.
+seed: 0
+report_to: [wandb]
+run_name: "GRPO (datasets: mbpp+codenet, lr_scheduler_type: constant_with_warmup, gradient_accumulation_steps: 256, mask_truncated_completions: false, cast_lm_head_to_fp32: true)"
+output_dir: runs/codenet_lit
+logging_steps: 1
+log_completions: true
+save_steps: TODO                        # grpo.yaml: about every half epoch (27 of 106 steps)

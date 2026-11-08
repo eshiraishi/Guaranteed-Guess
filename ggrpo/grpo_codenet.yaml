@@ -1,0 +1,56 @@
+# TRL's config for `trl grpo --config grpo_codenet.yaml`: grpo.yaml's recipe on MBPP-C + CodeNet. Lines that differ
+# from grpo.yaml say so. Values marked TODO are open decisions: TRL refuses to start until they are set.
+# Random-reward control (Spurious Rewards, Shao et al., ICML 2026), the same file with:
+#   --reward_funcs ggrpo.reward.reward_random --run_name "GRPO (datasets: mbpp+codenet, reward_funcs: reward_random)"
+env:
+  WANDB_ENTITY: assembly-transpilation  # transformers' W&B callback reads both from here (config.toml [track])
+  WANDB_PROJECT: rlvr
+  HF_HUB_OFFLINE: "1"                   # vLLM loads the repo id without a revision: use the cached snapshot
+
+# Model
+model_name_or_path: TODO                # the base-model gate (docs/paper-plan/06-schedule.md B-0); grpo.yaml: GG's checkpoint
+model_revision: TODO
+dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as GG's bf16 mixed-precision SFT
+
+# Data and reward
+datasets:
+  - path: json
+    data_files: data/rl/train.jsonl     # differs: written by `python -m ggrpo.rl` (MBPP-C + CodeNet train, decontaminated)
+    columns: [prompt, task_id]
+reward_funcs: [ggrpo.reward.reward_pass]
+
+# GRPO
+num_generations: 8
+loss_type: dapo                         # TRL default; normalizes over the global accumulated batch, so accumulation is exact
+beta: 0.0
+learning_rate: 1.0e-6                   # TRL GRPO default; decays linearly to 0 (transformers default lr_scheduler_type)
+max_steps: TODO                         # differs: 2 epochs as in grpo.yaml = 2 x (rows of data/rl/train.jsonl // 16)
+per_device_train_batch_size: 1          # differs: sequences up to 32k tokens (grpo.yaml: 8 OOMed at 4k); UNTESTED: memory pilot on the longest batch first
+gradient_accumulation_steps: 128        # differs: still 16 prompts x 8 completions = 128 per update
+max_completion_length: 16384            # differs (Enzo, Nov 7): config.toml rl.max_answer_tokens + EOS margin; ~97% of CodeNet problems kept
+mask_truncated_completions: true
+vllm_max_model_length: 32768            # differs: the base's max_position_embeddings; rl.max_prompt_tokens leaves room for the template
+
+# Sampling, explicit so nothing comes from the checkpoint's generation_config.json; config.toml [generate.sample] matches
+temperature: 1.0
+top_k: 0
+top_p: 1.0
+repetition_penalty: 1.0
+
+# Generation backend
+use_vllm: true
+vllm_mode: colocate
+
+# Precision and memory
+bf16: true
+gradient_checkpointing: true
+
+# Tracking (W&B; WANDB_API_KEY from .env, see ops/lanes/full_seed.sh): every argument here, seed included, becomes
+# run config. The name is the recipe: "GRPO" is grpo.yaml as is; a variant is "GRPO (key: value)" with TRL's keys.
+seed: 0
+report_to: [wandb]
+run_name: "GRPO (datasets: mbpp+codenet)"
+output_dir: runs/codenet
+logging_steps: 1
+log_completions: true
+save_steps: TODO                        # grpo.yaml: about every half epoch (27 of 106 steps)

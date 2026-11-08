@@ -1,4 +1,5 @@
 """Harness verdicts on known inputs. Authoritative only inside the macOS 13 VM (the GG toolchain)."""
+import glob
 import platform
 
 import polars as pl
@@ -54,3 +55,39 @@ def test_check_stdio_failures(asm, verdict):
 def test_check_task_dispatches_on_the_grader():
     assert check_task(task["arm_ref"], task["driver"], None).passed
     assert check_task(Task.compile(add, settings.build.arm), None, tests).passed
+
+
+# Code after a literal section, shrunk from real references: ld asserts and writes a snapshot of about 116 MB
+LD_ASSERTION = """\
+	.section	__TEXT,__literal8,8byte_literals
+	.long	7
+_gcd:                                   ; @gcd
+	.cfi_startproc
+	mov	x8, x1
+	sdiv	w9, w0, w1
+	ret
+	.cfi_endproc
+	.cfi_startproc
+	add	x29, sp, #48
+	.cfi_def_cfa w29, 16
+	.cfi_offset w30, -8
+	.cfi_offset w29, -16
+	sub	x8, x29, #12
+	str	x8, [sp, #16]
+	adrp	x0, l_.str@PAGE
+	str	x8, [sp]
+Lloh2:
+	adrp	x0, l_.str.1@PAGE
+Lloh3:
+	add	x0, x0, l_.str.1@PAGEOFF
+	bl	_printf
+	.cfi_endproc
+"""
+
+
+def test_ld_assertion_leaves_no_snapshot():
+    before = set(glob.glob("/private/tmp/a.out-*.ld-snapshot*"))
+    result = check_stdio(LD_ASSERTION, [{"input": "", "output": ""}])
+    assert result.verdict == "link_err"
+    assert "Assertion failed" in result.stderr
+    assert set(glob.glob("/private/tmp/a.out-*.ld-snapshot*")) == before

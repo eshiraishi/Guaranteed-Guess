@@ -1,6 +1,8 @@
 """Reward server (macOS 13 VM): POST /score [{task_id, completion}] -> one harness Result per item, for the tasks of
 every file in server.tasks (C-driver tasks and stdio tasks alike).
-404 for unknown task ids; 503 if a driver failed to build, so training stops instead of learning from it."""
+404 for unknown task ids; 503 if a driver failed to build or the disk is nearly full, so training stops instead of
+learning from it."""
+import shutil
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
@@ -35,6 +37,8 @@ class Item(BaseModel):
 @app.post("/score")
 def score(items: list[Item]) -> list[Result]:
     start = time.monotonic()
+    if (free_gb := shutil.disk_usage("/tmp").free / 2**30) < settings.server.min_free_gb:
+        raise HTTPException(503, f"only {free_gb:.1f} GB free on /tmp's disk")
     batch = (
         pl.DataFrame([item.model_dump() for item in items], schema={"task_id": pl.String, "completion": pl.String})
         .join(tasks, on="task_id", how="left", maintain_order="left")

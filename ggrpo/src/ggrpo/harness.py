@@ -4,7 +4,9 @@ The prediction is the only definition of the function, so an empty or truncated 
 Verdicts: pass | empty (nothing extracted) | assemble_err | link_err | crash (killed by a signal, e.g. SIGABRT
 from a failed assert) | timeout | wrong_output (non-zero exit) | infra_err (the test driver itself did not build)."""
 import hashlib
+import re
 import resource
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -19,6 +21,9 @@ from ggrpo.settings import Settings
 
 settings = Settings()
 run = partial(subprocess.run, capture_output=True, text=True, errors="replace")
+# ld writes one of these, about 116 MB, on every assertion; malformed model output asserts often
+linker_snapshot = re.compile(r"^A linker snapshot was created at:\n\t(/(?:private/)?tmp/a\.out-[\d-]+\.ld-snapshot(?:-\d+)?)$",
+                             re.MULTILINE)
 
 Verdict = Literal["pass", "empty", "assemble_err", "link_err", "crash", "timeout", "wrong_output", "infra_err"]
 
@@ -54,6 +59,8 @@ def link(work: Path, asm: str, objects: list[Path], start: float) -> Result | No
         except subprocess.TimeoutExpired:
             return Result(verdict=failure, stderr="timeout", seconds=time.monotonic() - start)
         if p.returncode:
+            if snapshot := linker_snapshot.search(p.stderr):
+                shutil.rmtree(snapshot.group(1))
             return Result(verdict=failure, returncode=p.returncode, stderr=p.stderr[-settings.harness.stderr_tail:],
                           seconds=time.monotonic() - start)
     return None

@@ -35,6 +35,7 @@ class Server(BaseModel):
     url: HttpUrl
     timeout: float
     outage_seconds: float
+    min_free_gb: int           # 503 below this much free disk
     tasks: list[Path]                   # task files (jsonl) whose task ids the server scores
 
 

@@ -87,6 +87,37 @@ class Codenet(BaseModel):
     cap: dict[str, int]        # tasks per problem in each split
 
 
+class Decontam(BaseModel):
+    n: int                     # canonical tokens per n-gram
+    min_instructions: int      # shortest eval function the asm rule checks
+    min_rare: int              # fewest rare n-grams such a function needs
+    min_exact: int             # shortest function the exact rule requires
+    min_rare_c: int            # fewest rare C n-grams an item needs for the c rule
+    max_df: float              # n-grams above this share of the pooled samples are boilerplate
+    df_sample: int             # training documents sampled per source for that share
+    report: float              # lowest score written
+    drop_asm: float            # asm score from which a document is left out
+    drop_c: float              # c score from which a document is left out
+    evals: list[Path]          # eval task files (jsonl with task_id and prompt)
+    bringup: HubDataset        # GG's BringUp bench
+    bringup_c: Path            # its C sources, one folder per program
+    gg: HubDataset             # GG's SFT pairs
+    stack: list[HubDataset]    # C of GG's Stack documents
+    angha_url: str             # GitHub tarball of AnghaBench at a pinned commit
+    angha_c: Path              # its C files, written by ggrpo.anghabench
+    canary_c: Path             # planted copies' C, written by ggrpo.canary (Mac)
+    canary_x86: Path           # their x86, written by ggrpo.canary_build (VM)
+    canary_programs: int       # planted programs per type
+    canary_seed: int
+    canary_recall: dict[str, float]   # lowest recall per kind of copy (the protocol's bar minus 5 points)
+    budget: dict[str, float]   # largest share of each source's documents that may be dropped
+    fraction: float            # share of training documents scanned: 1.0, or less for a smoke test
+    workers: int
+    batch: int                 # documents per worker task
+    out: Path
+    items: Path                # per eval item, which rules could check it
+
+
 class Decoding(BaseModel):
     num_beams: int
     do_sample: bool
@@ -168,6 +199,7 @@ class Settings(BaseSettings):
     harness: Harness
     build: Build
     codenet: Codenet
+    decontam: Decontam
     generate: Generate
     score: Score
     paper: Paper

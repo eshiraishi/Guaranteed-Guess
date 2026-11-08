@@ -73,6 +73,40 @@ chunk = 5000                   # solutions per part
 tasks = { train = "data/codenet/train.jsonl", val = "data/codenet/val.jsonl", test = "data/codenet/test.jsonl" }
 cap = { train = 10, val = 1, test = 1 }
 
+[decontam]   # python -m ggrpo.decontam (Mac, --extra data, after the build, ggrpo.anghabench and the canaries)
+n = 13                       # canonical tokens per n-gram (the data survey's 13-gram)
+min_instructions = 30        # asm rule: shorter eval functions are not checked (the data survey's x86 rule)
+min_rare = 20                # asm rule: nor are eval functions with fewer rare n-grams than this (all boilerplate)
+min_exact = 5                # exact rule: every item function at least this long must be token-exact in the document
+min_rare_c = 10              # c rule: items with fewer rare C n-grams are not checked
+max_df = 0.001               # an n-gram in more than this share of the pooled samples is boilerplate
+df_sample = 100000           # training documents sampled per source to measure that share
+report = 0.2                 # scores from here are written (for the paper's sweep)
+drop_asm = 0.5               # asm rule: leave out documents from this score
+drop_c = 0.33                # c rule: leave out documents from this score (the survey's manually reviewed line)
+evals = ["data/dev.jsonl", "data/eval.jsonl", "data/codenet/val.jsonl", "data/codenet/test.jsonl"]
+bringup = { repo = "ahmedheakl/gg-bench-bringup-O2", revision = "ae6623a3f86a0d33e20d83f84f4989ea9ce61410", files = "data/*.parquet" }
+bringup_c = "../eval/bringup-bench"
+gg = { repo = "ahmedheakl/gg-armv8-O2-instruct", revision = "5c98f387f25cb4e0bec390e8f1c080e4a02414de", files = "data/*.parquet" }
+stack = [
+    { repo = "ahmedheakl/the_stack_data_c_0", revision = "a67c76bc0642046546f05507aa7eac0f1a08fefc", files = "data/*.parquet" },
+    { repo = "ahmedheakl/the_stack_data_c_1", revision = "c06a94e036a26dec50f9d975e2839aea0dea6939", files = "data/*.parquet" },
+    { repo = "ahmedheakl/the_stack_data_c_2", revision = "05abbc26a6aa6d9ad3fadc4614b4ce6de6606e7f", files = "data/*.parquet" },
+]
+angha_url = "https://codeload.github.com/brenocfg/AnghaBench/tar.gz/d8034ac8562b8c978376008f4b33df01b8887b19"
+angha_c = "data/raw/anghabench_c.parquet"
+canary_c = "data/sft/canary_c.parquet"
+canary_x86 = "data/sft/canary_x86.parquet"
+canary_programs = 240        # per type (contest, short, repo); a fresh draw, not the one the rule was chosen on
+canary_seed = 20261109
+canary_recall = { exact = 0.94, rename = 0.90, "edit_0.05" = 0.85, "edit_0.1" = 0.85, "edit_0.2" = 0.65 }
+budget = { gg = 0.01, codenet = 0.10 }
+fraction = 1.0
+workers = 12                 # of the Mac's 15 cores; pass --decontam.workers 4 while the VM build (10 cores) runs
+batch = 1000                 # documents per worker task; each file waits for its slowest task
+out = "data/sft/decontam.parquet"
+items = "data/sft/decontam_items.parquet"
+
 [generate]
 model = "ahmedheakl/gg-armv8-O2"
 revision = "0444a378f384300187c7f43914fc986a81ff051a"

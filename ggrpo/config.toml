@@ -119,6 +119,13 @@ max_prompt_tokens = 16256    # Enzo, Nov 7: 16,384 per side; 128 left for the ch
 max_answer_tokens = 16320    # grpo_codenet.yaml's 32,768 (the base's positions) with EOS; ~97% of CodeNet problems keep a task
 out = "data/rl/train.jsonl"
 
+[strata]   # python -m ggrpo.strata (Mac, --extra data, after ggrpo.decontam): pass rates by similarity to training
+train = ["gg"]               # GG's release trained on GG's SFT pairs only
+decontaminated = false
+margin = 0.10                # protocol: if high beats clean by more than this, headline the clean subset
+scored = ["results/humaneval/modern/modern_beam_search.scored.jsonl", "results/grpo_eval/base_bringup_beam8_rtx5000.scored.jsonl"]
+out = "results/strata/gg_base.parquet"
+
 [generate]
 model = "ahmedheakl/gg-armv8-O2"
 revision = "0444a378f384300187c7f43914fc986a81ff051a"

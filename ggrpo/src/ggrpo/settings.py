@@ -132,6 +132,14 @@ class Rl(BaseModel):
     out: Path
 
 
+class Strata(BaseModel):
+    train: list[Literal["gg", "codenet", "mbpp"]]   # document sources the scored model trained on
+    decontaminated: bool       # true if it trained without the documents ggrpo.decontam drops
+    margin: float              # if the high stratum beats the clean one by more, headline the clean subset
+    scored: list[Path]         # scored result files of one model
+    out: Path
+
+
 class Decoding(BaseModel):
     num_beams: int
     do_sample: bool
@@ -216,6 +224,7 @@ class Settings(BaseSettings):
     decontam: Decontam
     sft: Sft
     rl: Rl
+    strata: Strata
     generate: Generate
     score: Score
     paper: Paper

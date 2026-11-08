@@ -2,9 +2,10 @@
 (CDLA-Permissive-2.0, no scraping). Writes two tables:
 - problems: one row per problem with its judge, its samples (stripped, in statement order) and its split;
 - solutions: one row per distinct accepted solution (whitespace-insensitive, lowest submission id kept).
-Problems with fewer than codenet.min_outputs distinct sample outputs are SFT-only. The others are split by problem:
-sha256(seed:problem_id) alone places each one, so the fractions are approximate, and the test split depends neither on
-library versions nor on which other problems are eligible.
+Problems with fewer than codenet.min_outputs distinct sample outputs are SFT-only. The others are split by group
+(problems with identical samples are one group: AtCoder reuses problems across contests): sha256(seed:group) alone
+places each group, so the fractions are approximate, and the test split depends neither on library versions nor on
+which other problems are eligible.
 No asm here: the VM build comes next."""
 import hashlib
 import itertools
@@ -78,14 +79,21 @@ problems = problems.with_columns(
     samples=pl.col("statement").map_elements(parse_samples, return_dtype=pl.List(sample))
 ).with_columns(
     eligible=(pl.col("samples").list.eval(pl.element().struct.field("output")).list.n_unique()
-              >= settings.codenet.min_outputs).fill_null(False)   # unpaired samples: not an RL problem
+              >= settings.codenet.min_outputs).fill_null(False),   # unpaired samples: not an RL problem
+    # AtCoder reuses a problem across concurrent contests (p03945 = p03947): identical samples make one group, which
+    # lands in one split; it is named by its smallest problem id
+    group=pl.col("problem_id").min().over(
+        pl.when(pl.col("samples").list.len() > 0)
+        .then(pl.col("samples").list.eval(pl.concat_str(pl.element().struct.field("input"), pl.lit("\x1f"),
+                                                        pl.element().struct.field("output"))).list.sort().list.join("\x1e"))
+        .otherwise(pl.col("problem_id"))
+    ),
 )
 
 rl = (
     problems.filter("eligible")
-    .with_columns(quantile=pl.col("problem_id").map_elements(   # uniform in [0, 1), from this problem alone
-        lambda problem_id: int(hashlib.sha256(f"{settings.codenet.seed}:{problem_id}".encode()).hexdigest()[:15], 16)
-        / 16**15,
+    .with_columns(quantile=pl.col("group").map_elements(   # uniform in [0, 1), from this group alone
+        lambda group: int(hashlib.sha256(f"{settings.codenet.seed}:{group}".encode()).hexdigest()[:15], 16) / 16**15,
         return_dtype=pl.Float64,
     ))
     .select("problem_id", split=pl.coalesce(   # the first split whose cumulative fraction exceeds the quantile
@@ -98,7 +106,7 @@ if rl["split"].is_null().any():
 problems = (
     problems.join(rl, on="problem_id", how="left", validate="1:1")
     .with_columns(pl.col("split").fill_null("sft_only"))
-    .select("problem_id", "judge", "title", "split", "samples", "solutions")
+    .select("problem_id", "group", "judge", "title", "split", "samples", "solutions")
     .sort("problem_id")
 )
 solutions = solutions.join(problems.select("problem_id", "judge", "split"), on="problem_id", validate="m:1").select(
@@ -113,4 +121,5 @@ counts = problems.group_by("judge", "split").agg(problems=pl.len(), solutions=pl
 )
 log.info("wrote", problems=str(settings.codenet.problems), solutions=str(settings.codenet.solutions),
          submissions=submissions.height, distinct=solutions.height,
+         grouped=problems.filter(pl.col("group").is_duplicated())["problem_id"].len(),
          unpaired_samples=problems["samples"].is_null().sum(), counts=counts.to_dicts())

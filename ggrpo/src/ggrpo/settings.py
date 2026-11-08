@@ -140,6 +140,11 @@ class Strata(BaseModel):
     out: Path
 
 
+class Reward(BaseModel):
+    random_probability: float  # reward_random's chance of 1.0
+    seed: int
+
+
 class Decoding(BaseModel):
     num_beams: int
     do_sample: bool
@@ -225,6 +230,7 @@ class Settings(BaseSettings):
     sft: Sft
     rl: Rl
     strata: Strata
+    reward: Reward
     generate: Generate
     score: Score
     paper: Paper

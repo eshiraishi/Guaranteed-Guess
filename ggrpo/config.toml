@@ -126,6 +126,10 @@ margin = 0.10                # protocol: if high beats clean by more than this, 
 scored = ["results/humaneval/modern/modern_beam_search.scored.jsonl", "results/grpo_eval/base_bringup_beam8_rtx5000.scored.jsonl"]
 out = "results/strata/gg_base.parquet"
 
+[reward]   # ggrpo.reward (training host)
+random_probability = 0.5     # reward_random: Spurious Rewards' random reward with gamma = 0.5
+seed = 0
+
 [generate]
 model = "ahmedheakl/gg-armv8-O2"
 revision = "0444a378f384300187c7f43914fc986a81ff051a"

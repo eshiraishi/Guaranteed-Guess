@@ -85,6 +85,7 @@ Lloh3:
 """
 
 
+@pytest.mark.skipif(not platform.mac_ver()[0].startswith("13."), reason="only the VM's ld64 asserts on this")
 def test_ld_assertion_leaves_no_snapshot():
     before = set(glob.glob("/private/tmp/a.out-*.ld-snapshot*"))
     result = check_stdio(LD_ASSERTION, [{"input": "", "output": ""}])

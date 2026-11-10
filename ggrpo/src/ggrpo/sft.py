@@ -1,7 +1,8 @@
 """SFT train and val files (Mac, --extra data, after ggrpo.decontam) in the SFT baseline's format: TRL
-prompt-completion, GG's prompt and answer. Train: MBPP-C train, the SFT side of CodeNet (every built solution of
-SFT-only and train problems) and GG's released O2 pairs, in that order of precedence for exact x86 duplicates. Every
-document with a drop row in ggrpo.decontam's output is left out, and so is any row (train or val) whose prompt or answer
+prompt-completion, GG's prompt and answer. Train: CodeNet's SFT-only problems (every built solution) and GG's released
+O2 pairs, in that order of precedence for exact x86 duplicates. No RL problem (D5, Enzo, Nov 10): CodeNet train problems
+and MBPP-C train stay out, rows whose x86 equals an RL task's (rl.sources) are left out, and every document with a drop
+row in ggrpo.decontam's output (eval or RL item) is left out. So is any row (train or val) whose prompt or answer
 is over sft.max_prompt_tokens or sft.max_answer_tokens under the base model's tokenizer. Texts over sft.max_bytes cannot
 fit and are left out before tokenizing: the tokenizer panics on two GG documents with 20 MB of spaces. Val, for the held-out SFT loss:
 MBPP-C dev and CodeNet val. Rows keep their source and document id (provenance). Two passes: x86 hashes decide which rows are
@@ -49,12 +50,12 @@ def read_tasks(path) -> pl.LazyFrame:
     )
 
 
-solutions = pl.read_parquet(settings.codenet.solutions).filter(pl.col("split").is_in(["sft_only", "train"]))
+solutions = pl.read_parquet(settings.codenet.solutions).filter(pl.col("split") == "sft_only")
 built = pl.read_parquet(settings.codenet.built / "part-*.parquet", columns=["solution_id"])
 if missing := solutions.join(built, on="solution_id", how="anti").height:
-    raise ValueError(f"{missing} SFT-side CodeNet solutions are not in {settings.codenet.built} yet")
+    raise ValueError(f"{missing} SFT-only CodeNet solutions are not in {settings.codenet.built} yet")
+rl_keys = pl.concat([read_tasks(path) for path in settings.rl.sources]).select(key=pl.col("x86").hash()).collect()["key"]
 sources = [   # in order of precedence for exact x86 duplicates
-    read_tasks(settings.data.train),
     solutions.lazy().join(pl.scan_parquet(settings.codenet.built / "part-*.parquet"), on="solution_id")
     .filter(pl.col("x86").is_not_null() & pl.col("arm").is_not_null())
     .select(source=pl.lit("codenet"), document_id=pl.format("codenet/{}/{}", "problem_id", "solution_id"),
@@ -72,7 +73,7 @@ keys = pl.concat([frame.filter(tokenizable).select("document_id", key=pl.col("x8
 if keys["document_id"].is_duplicated().any():
     raise ValueError("document ids must be unique across sources")
 kept = keys.unique("key", keep="first", maintain_order=True).filter(
-    ~pl.col("document_id").is_in(contaminated.implode()), "fits"
+    ~pl.col("document_id").is_in(contaminated.implode()), "fits", ~pl.col("key").is_in(rl_keys.implode())
 )
 
 settings.sft.train.parent.mkdir(parents=True, exist_ok=True)
@@ -88,5 +89,5 @@ to_conversation(val).sink_parquet(settings.sft.val)
 train = pl.scan_parquet(settings.sft.train).group_by("source").agg(rows=pl.len()).sort("source").collect()
 log.info("wrote", train=str(settings.sft.train), val=str(settings.sft.val), documents=keys.height,
          duplicates=keys.height - keys["key"].n_unique(), contaminated=contaminated.len(),
-         too_long=keys.filter(~pl.col("fits")).height,
+         too_long=keys.filter(~pl.col("fits")).height, rl_copies=keys.filter(pl.col("key").is_in(rl_keys.implode())).height,
          rows=train.to_dicts(), val_rows=pl.scan_parquet(settings.sft.val).select(pl.len()).collect().item())

@@ -102,9 +102,14 @@ canary_programs = 240        # per type (contest, short, repo); a fresh draw, no
 canary_seed = 20261109
 canary_recall = { exact = 0.94, rename = 0.90, "edit_0.05" = 0.85, "edit_0.1" = 0.85, "edit_0.2" = 0.65 }
 budget = { gg = 0.01, codenet = 0.10 }
+# D5 (Enzo, Nov 10): the RL-train tasks (rl.sources) are items too, and their drops apply to SFT only (ggrpo.rl ignores
+# them). Largest share of the SFT documents after D5 (GG, CodeNet sft_only) dropped by eval and RL items together:
+# measured Nov 10 at GG 1.56%, CodeNet 13.5% (option A: every overlapping SFT document goes, the RL pool stays whole)
+budget_sft = { gg = 0.02, codenet = 0.15 }
 fraction = 1.0
 workers = 12                 # of the Mac's 15 cores; pass --decontam.workers 4 while the VM build (10 cores) runs
-batch = 1000                 # documents per worker task; each file waits for its slowest task
+batch = 20000                # documents per worker task; each task also ships the n-gram index, which with the RL
+                             # items is too big to send 1,300 times (same output: Nov 10, eval rows byte-identical)
 out = "data/sft/decontam.parquet"
 items = "data/sft/decontam_items.parquet"
 

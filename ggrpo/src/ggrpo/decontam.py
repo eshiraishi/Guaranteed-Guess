@@ -1,6 +1,10 @@
-"""Decontamination (Mac, --extra data): which training documents leak an eval item.
+"""Decontamination (Mac, --extra data): which training documents leak an eval item or an RL-train task.
 Eval items: the tasks of every file in decontam.evals (MBPP-C dev, HumanEval-C, CodeNet val and test) and BringUp.
-Training documents: GG's O2 SFT pairs, the SFT side of CodeNet (SFT-only and train problems) and MBPP-C train.
+RL items (set "rl", D5, Enzo, Nov 10): the tasks of every file in rl.sources (MBPP-C train, CodeNet train). Their drops
+keep RL problems out of SFT; ggrpo.rl ignores them. Budgets: decontam.budget for eval items over every document (as
+approved Nov 8), decontam.budget_sft for eval and RL items together over the SFT documents (GG, CodeNet sft_only).
+Training documents: GG's O2 SFT pairs, CodeNet's SFT-only and train problems, and MBPP-C train (the last two are
+scanned for ggrpo.rl; SFT takes neither).
 
 Writes (document, item, rule, score, drop) for every score at or above decontam.report; downstream, a document with any
 drop row is left out. The rules:
@@ -158,6 +162,7 @@ def read_evals() -> pl.DataFrame:
     tasks = pl.concat([
         *(pl.read_ndjson(path).select(item_id="task_id", set=pl.lit(path.stem), x86=x86)
           for path in settings.decontam.evals),
+        *(pl.read_ndjson(path).select(item_id="task_id", set=pl.lit("rl"), x86=x86) for path in settings.rl.sources),
         pl.read_parquet(settings.decontam.bringup.download() / "data").select(
             item_id=pl.format("bringup/{}", pl.col("file").str.strip_suffix(".s")), set=pl.lit("bringup"), x86="x86"
         ),
@@ -369,14 +374,25 @@ if __name__ == "__main__":   # pool workers import this module
     source = pl.when(pl.col("document_id").str.starts_with("codenet/")).then(pl.lit("codenet")) \
         .when(pl.col("document_id").str.starts_with("mbpp/")).then(pl.lit("mbpp")).otherwise(pl.lit("gg"))
     dropped = output.filter("drop").with_columns(source=source)
-    shares = {name: dropped.filter(pl.col("source") == name)["document_id"].n_unique()
+    eval_dropped = dropped.filter(~pl.col("item_id").is_in(real.filter(pl.col("set") == "rl")["item_id"].implode()))
+    shares = {name: eval_dropped.filter(pl.col("source") == name)["document_id"].n_unique()
               / sum(frame.select(pl.len()).collect().item() for frame in documents[name])
               for name in settings.decontam.budget}
+    sft_codenet = pl.read_parquet(settings.codenet.solutions).filter(pl.col("split") == "sft_only").select(
+        document_id=pl.format("codenet/{}/{}", "problem_id", "solution_id"))
+    sft_documents = {"gg": sum(frame.select(pl.len()).collect().item() for frame in documents["gg"]),
+                     "codenet": documents["codenet"][0].join(sft_codenet.lazy(), on="document_id", how="semi")
+                     .select(pl.len()).collect().item()}
+    sft_dropped = dropped.filter((pl.col("source") == "gg") | pl.col("document_id").is_in(sft_codenet["document_id"].implode()))
+    shares_sft = {name: sft_dropped.filter(pl.col("source") == name)["document_id"].n_unique() / sft_documents[name]
+                  for name in settings.decontam.budget_sft}
     flagged_items = dropped.group_by("item_id").agg(documents=pl.col("document_id").n_unique())
     summary = real.select("item_id", "set").join(flagged_items, on="item_id", how="left").group_by("set").agg(
         items=pl.len(), items_flagged=pl.col("documents").is_not_null().sum(), documents=pl.col("documents").sum())
     log.info("wrote", path=str(settings.decontam.out), pairs=output.height, summary=summary.sort("set").to_dicts(),
              by_rule=dropped.group_by("rule", "source").agg(pl.col("document_id").n_unique()).sort("rule", "source")
-             .to_dicts(), shares=shares)
+             .to_dicts(), shares=shares, shares_sft=shares_sft)
     if over := {name: share for name, share in shares.items() if share > settings.decontam.budget[name]}:
         raise ValueError(f"over the protocol's budget, stop and ask: {over}")
+    if over := {name: share for name, share in shares_sft.items() if share > settings.decontam.budget_sft[name]}:
+        raise ValueError(f"over the SFT budget, stop and ask: {over}")

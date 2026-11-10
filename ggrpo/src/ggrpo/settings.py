@@ -111,7 +111,8 @@ class Decontam(BaseModel):
     canary_programs: int       # planted programs per type
     canary_seed: int
     canary_recall: dict[str, float]   # lowest recall per kind of copy (the protocol's bar minus 5 points)
-    budget: dict[str, float]   # largest share of each source's documents that may be dropped
+    budget: dict[str, float]   # largest share of each source's documents that eval items may drop
+    budget_sft: dict[str, float]   # largest share of the SFT documents that eval and RL items may drop together
     fraction: float            # share of training documents scanned: 1.0, or less for a smoke test
     workers: int
     batch: int                 # documents per worker task

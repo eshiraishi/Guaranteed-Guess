@@ -1,5 +1,5 @@
 """The GRPO train file (Mac, --extra data, after ggrpo.decontam): the tasks of every file in rl.sources (MBPP-C train,
-CodeNet train), except those with a drop row in ggrpo.decontam's output, and those whose prompt or
+CodeNet train), except those with a drop row for an eval item in ggrpo.decontam's output, and those whose prompt or
 reference answer is longer than rl.max_prompt_tokens or rl.max_answer_tokens under the base model's tokenizer (so
 every kept task fits GRPO's own limits). Writes task_id and prompt, the columns trl reads."""
 import polars as pl
@@ -23,7 +23,8 @@ def count_tokens(texts: pl.Series) -> pl.Series:
 tasks = pl.concat([pl.read_ndjson(path).select("task_id", "prompt", "arm_ref") for path in settings.rl.sources])
 if tasks["task_id"].is_duplicated().any():
     raise ValueError("task ids must be unique across rl.sources")
-contaminated = pl.read_parquet(settings.decontam.out).filter("drop")
+contaminated = pl.read_parquet(settings.decontam.out).filter(   # eval items only: RL items exist to clean SFT (D5)
+    "drop", ~pl.col("item_id").is_in(tasks["task_id"].implode()))
 tasks = tasks.with_columns(
     source=pl.col("task_id").str.extract(r"^([^/]+)/"),
     contaminated=pl.col("task_id").is_in(contaminated["document_id"].implode()),

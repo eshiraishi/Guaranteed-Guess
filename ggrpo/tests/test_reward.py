@@ -52,3 +52,13 @@ def test_random_reward_ignores_verdicts_and_is_reproducible(monkeypatch):
     assert set(rewards) == {0.0, 1.0}                     # every verdict passed, yet some rewards are 0
     assert 0.4 < sum(rewards) / len(rewards) < 0.6        # reward.random_probability = 0.5
     assert call() == rewards                              # same step and completions, same draws
+
+
+def test_stub_reward_never_calls_the_server(monkeypatch):
+    monkeypatch.setattr(httpx, "post", lambda url, **kwargs: pytest.fail("reward_stub must not call the server"))
+    rewards = reward.reward_stub(
+        prompts=[[]] * 400, completions=[[{"content": f"c{i}"}] for i in range(400)], completion_ids=[[0]] * 400,
+        task_id=["mbpp/2"] * 400, trainer_state=TrainerState(), log_extra=lambda *args: None,
+        log_metric=lambda *args: None,
+    )
+    assert set(rewards) == {0.0, 1.0}

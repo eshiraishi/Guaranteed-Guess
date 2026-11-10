@@ -1,5 +1,6 @@
 """TRL reward functions: reward_pass is 1.0 if the harness passes the completion, else 0.0; reward_random is the
-Spurious Rewards control (Shao et al., ICML 2026), which scores and logs the same way but ignores the verdict."""
+Spurious Rewards control (Shao et al., ICML 2026), which scores and logs the same way but ignores the verdict;
+reward_stub draws the same random rewards without the reward server, for a memory pilot on the training host alone."""
 import hashlib
 from collections import Counter
 from collections.abc import Callable
@@ -43,12 +44,29 @@ def reward_random(
     """1.0 with probability reward.random_probability, drawn from (seed, step, position, completion) alone. The harness
     still scores every completion, so the verdict metrics show what training on noise does to the pass rate."""
     score_completions(completions, task_id, trainer_state, log_extra, log_metric)
+    rewards = draw_rewards(completions, trainer_state)
+    log_metric("reward/random_mean", sum(rewards) / len(rewards))
+    return rewards
+
+
+def reward_stub(
+    prompts: list[list[dict[str, str]]],
+    completions: list[list[dict[str, str]]],
+    completion_ids: list[list[int]],
+    task_id: list[str],
+    trainer_state: TrainerState,
+    log_extra: Callable[[str, list], None],
+    log_metric: Callable[[str, float], None],
+) -> list[float]:
+    """reward_random without the harness: almost every group of completions has mixed rewards, so the whole loss runs."""
+    return draw_rewards(completions, trainer_state)
+
+
+def draw_rewards(completions: list[list[dict[str, str]]], trainer_state: TrainerState) -> list[float]:
     keys = [f"{settings.reward.seed}:{trainer_state.global_step}:{position}:{completion[0]['content']}"
             for position, completion in enumerate(completions)]
     draws = [int.from_bytes(hashlib.sha256(key.encode()).digest()[:8]) / 2**64 for key in keys]
-    rewards = [float(draw < settings.reward.random_probability) for draw in draws]
-    log_metric("reward/random_mean", sum(rewards) / len(rewards))
-    return rewards
+    return [float(draw < settings.reward.random_probability) for draw in draws]
 
 
 def score_completions(

@@ -39,19 +39,20 @@ def test_http_error_stops_without_retry(monkeypatch):
     assert len(calls) == 1
 
 
-def test_random_reward_ignores_verdicts_and_is_reproducible(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda url, **kwargs: httpx.Response(
-        200, json=[{"verdict": "pass", "passed": True}] * 400, request=httpx.Request("POST", url)))
+def test_random_reward_shuffles_within_groups_and_is_reproducible(monkeypatch):
+    verdicts = [{"verdict": "pass" if i % 4 == 0 else "fail", "passed": i % 4 == 0} for i in range(400)]
+    monkeypatch.setattr(httpx, "post", lambda url, **kwargs: httpx.Response(200, json=verdicts, request=httpx.Request("POST", url)))
     def call():
         return reward.reward_random(
             prompts=[[]] * 400, completions=[[{"content": f"c{i}"}] for i in range(400)], completion_ids=[[0]] * 400,
-            task_id=["mbpp/2"] * 400, trainer_state=TrainerState(), log_extra=lambda *args: None,
+            task_id=[f"mbpp/{i // 8}" for i in range(400)], trainer_state=TrainerState(), log_extra=lambda *args: None,
             log_metric=lambda *args: None,
         )
     rewards = call()
-    assert set(rewards) == {0.0, 1.0}                     # every verdict passed, yet some rewards are 0
-    assert 0.4 < sum(rewards) / len(rewards) < 0.6        # reward.random_probability = 0.5
-    assert call() == rewards                              # same step and completions, same draws
+    real = [float(verdict["passed"]) for verdict in verdicts]
+    assert rewards != real                                                        # the rewards no longer follow the verdicts
+    assert all(sum(rewards[i:i + 8]) == sum(real[i:i + 8]) for i in range(0, 400, 8))   # but each group keeps its passes
+    assert call() == rewards                                                      # same step and groups, same shuffle
 
 
 def test_stub_reward_never_calls_the_server(monkeypatch):

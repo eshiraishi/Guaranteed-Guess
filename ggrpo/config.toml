@@ -136,7 +136,7 @@ scored = ["results/humaneval/modern/modern_beam_search.scored.jsonl", "results/g
 out = "results/strata/gg_base.parquet"
 
 [reward]   # ggrpo.reward (training host)
-random_probability = 0.5     # reward_random: Spurious Rewards' random reward with gamma = 0.5
+random_probability = 0.5     # reward_stub's chance of 1.0 (reward_random shuffles the real rewards instead)
 seed = 0
 
 [generate]

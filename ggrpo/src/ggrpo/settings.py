@@ -146,7 +146,7 @@ class Strata(BaseModel):
 
 
 class Reward(BaseModel):
-    random_probability: float  # reward_random's chance of 1.0
+    random_probability: float  # reward_stub's chance of 1.0
     seed: int
 
 

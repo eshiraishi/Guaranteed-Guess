@@ -1,7 +1,9 @@
 """TRL reward functions: reward_pass is 1.0 if the harness passes the completion, else 0.0; reward_random is the
-Spurious Rewards control (Shao et al., ICML 2026), which scores and logs the same way but ignores the verdict;
-reward_stub draws the same random rewards without the reward server, for a memory pilot on the training host alone."""
+random-reward control (after Spurious Rewards, Shao et al., ICML 2026): each group's real rewards, shuffled within the
+group, so it has the same number of mixed groups and passes as reward_pass but no link to the completions (Enzo,
+Nov 10); reward_stub draws random rewards without the reward server, for a memory pilot on the training host alone."""
 import hashlib
+import random
 from collections import Counter
 from collections.abc import Callable
 from typing import get_args
@@ -41,10 +43,18 @@ def reward_random(
     log_extra: Callable[[str, list], None],
     log_metric: Callable[[str, float], None],
 ) -> list[float]:
-    """1.0 with probability reward.random_probability, drawn from (seed, step, position, completion) alone. The harness
-    still scores every completion, so the verdict metrics show what training on noise does to the pass rate."""
-    score_completions(completions, task_id, trainer_state, log_extra, log_metric)
-    rewards = draw_rewards(completions, trainer_state)
+    """reward_pass's rewards, shuffled within each group (a run of the same task_id, as TRL orders the completions), with
+    the shuffle seeded by (seed, step, group). The verdict metrics still show what training on noise does to the pass rate."""
+    results = score_completions(completions, task_id, trainer_state, log_extra, log_metric)
+    starts = [position for position in range(len(task_id)) if position == 0 or task_id[position] != task_id[position - 1]]
+    groups = [range(start, end) for start, end in zip(starts, [*starts[1:], len(task_id)])]
+    if len({len(group) for group in groups}) != 1:
+        raise ValueError(f"groups of unequal size {sorted({len(group) for group in groups})}: a group was split")
+    rewards = []
+    for number, group in enumerate(groups):
+        group_rewards = [float(results[position]["passed"]) for position in group]
+        random.Random(f"{settings.reward.seed}:{trainer_state.global_step}:{number}").shuffle(group_rewards)
+        rewards.extend(group_rewards)
     log_metric("reward/random_mean", sum(rewards) / len(rewards))
     return rewards
 

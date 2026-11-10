@@ -1,5 +1,8 @@
 # 06. Experiment schedule: phases, values, sweeps and decision rules
 
+> **Not the current plan.** This is the Oct 24 design for ideal resources, kept for reference. The plan we run is
+> [current/00-overview.md](current/00-overview.md) (Enzo, Nov 10: only current resources and data we may use).
+
 **Status (Oct 24, 2026): plan, designed for ideal resources first and then scaled to ours (§9).**
 Tags: [V] verified, [R] repo, [L] unverified literature, [P] proposal. Every value carries a reason or is marked as a
 sweep. "Gate" means a written decision rule checked before the next phase starts.

@@ -1,5 +1,8 @@
 # 03. Curriculum: difficulty-aware data scheduling for SFT and RL
 
+> **Not the current plan.** This is the Oct 24 design for ideal resources, kept for reference. The plan we run is
+> [current/00-overview.md](current/00-overview.md) (Enzo, Nov 10: only current resources and data we may use).
+
 **Status (Oct 24, 2026): plan.** Tags: [V] verified, [R] repo, [L] unverified literature, [P] proposal.
 
 ## The question, answered first

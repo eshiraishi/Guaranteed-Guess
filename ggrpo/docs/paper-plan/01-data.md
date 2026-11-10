@@ -1,5 +1,8 @@
 # 01. Data: what we can train and evaluate on, and how good each source is
 
+> **Not the current plan.** This is the Oct 24 design for ideal resources, kept for reference. The plan we run is
+> [current/00-overview.md](current/00-overview.md) (Enzo, Nov 10: only current resources and data we may use).
+
 **Status (Oct 24, 2026): plan.** Nothing here has been built. The tags are defined in [00-overview.md](00-overview.md#evidence-tags):
 **[V]** verified by the 3-vote check, **[R]** measured in this repo, **[L]** literature not verified in this run, **[P]** our
 proposal or inference.

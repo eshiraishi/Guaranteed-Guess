@@ -1,5 +1,8 @@
 # 02. Harness: training stack, reward fleet and verification modes
 
+> **Not the current plan.** This is the Oct 24 design for ideal resources, kept for reference. The plan we run is
+> [current/00-overview.md](current/00-overview.md) (Enzo, Nov 10: only current resources and data we may use).
+
 **Status (Oct 24, 2026): plan.** Tags: [V] verified, [R] repo, [L] unverified literature or general knowledge, [P] proposal.
 
 ## Summary

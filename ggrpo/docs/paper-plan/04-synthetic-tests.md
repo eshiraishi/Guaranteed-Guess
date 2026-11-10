@@ -1,5 +1,8 @@
 # 04. Synthetic tests with statistical guarantees (the separate arm)
 
+> **Not the current plan.** This is the Oct 24 design for ideal resources, kept for reference. The plan we run is
+> [current/00-overview.md](current/00-overview.md) (Enzo, Nov 10: only current resources and data we may use).
+
 **Status (Oct 24, 2026): design.** Tags: [V] verified, [R] repo, [L] unverified literature, [P] proposal.
 Scope decision (Oct 24): synthetic tests are in scope **as a separate, labeled arm**. The main corpus stays real-test
 ([01](01-data.md)). No teacher models: only the compiler, program-analysis tools and the model itself.

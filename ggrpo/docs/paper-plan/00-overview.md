@@ -1,5 +1,8 @@
 # Paper plan: top-down design for SFT + RLVR on GG (x86 → ARMv8 / AArch64 / RISC-V)
 
+> **Not the current plan.** This is the Oct 24 design for ideal resources, kept for reference. The plan we run is
+> [current/00-overview.md](current/00-overview.md) (Enzo, Nov 10: only current resources and data we may use).
+
 **Status (Oct 24, 2026): research done, plan proposed, nothing implemented.** It was written for Enzo and for a pitch to
 the GG authors. **Design comes first, without feasibility limits** (Enzo, Oct 24). Which parts to run, and on what
 resources, is decided later. Licenses are deferred until then too.

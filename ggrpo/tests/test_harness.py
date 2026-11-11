@@ -47,6 +47,11 @@ def test_check_stdio(c, verdict):
     assert check_stdio(Task.compile(c, settings.build.arm), tests).verdict == verdict
 
 
+@pytest.mark.parametrize(("c", "outcomes"), [(add, "PP"), (constant, "PF"), (aborts, "FF")])
+def test_check_stdio_runs_every_test(c, outcomes):
+    assert check_stdio(Task.compile(c, settings.build.arm), tests).tests == outcomes
+
+
 @pytest.mark.parametrize(("asm", "verdict"), [("", "empty"), ("\t.text\n", "link_err")])   # no main
 def test_check_stdio_failures(asm, verdict):
     assert check_stdio(asm, tests).verdict == verdict

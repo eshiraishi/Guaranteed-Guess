@@ -20,7 +20,7 @@ def respond(status, calls, failures=0):
         calls.append(url)
         if len(calls) <= failures:
             raise httpx.ConnectError("tunnel down")
-        return httpx.Response(status, json=[{"verdict": "pass", "passed": True}], request=httpx.Request("POST", url))
+        return httpx.Response(status, json=[{"verdict": "pass", "passed": True, "tests": "PP"}], request=httpx.Request("POST", url))
     return post
 
 
@@ -40,7 +40,7 @@ def test_http_error_stops_without_retry(monkeypatch):
 
 
 def test_random_reward_shuffles_within_groups_and_is_reproducible(monkeypatch):
-    verdicts = [{"verdict": "pass" if i % 4 == 0 else "fail", "passed": i % 4 == 0} for i in range(400)]
+    verdicts = [{"verdict": "pass" if i % 4 == 0 else "fail", "passed": i % 4 == 0, "tests": ""} for i in range(400)]
     monkeypatch.setattr(httpx, "post", lambda url, **kwargs: httpx.Response(200, json=verdicts, request=httpx.Request("POST", url)))
     def call():
         return reward.reward_random(

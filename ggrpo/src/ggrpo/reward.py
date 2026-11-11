@@ -86,26 +86,34 @@ def score_completions(
     log_extra: Callable[[str, list], None],
     log_metric: Callable[[str, float], None],
 ) -> list[dict]:
-    """The harness Result of every completion, from the reward server; verdict counts go to the trainer's logs."""
+    """The harness Result of every completion, from the reward server; verdicts and per-test outcomes go to the
+    trainer's logs (and ggrpo.record's rollouts), verdict counts to its metrics."""
     items = [{"task_id": task, "completion": completion[0]["content"]}
              for task, completion in zip(task_id, completions, strict=True)]
-    # Wait out an unreachable server (the SSH tunnel to the Mac VM) instead of crashing; scoring is a pure function of
-    # the items, so resending is safe. HTTP errors (404/503) are not transport errors and still stop the run.
+    results = post_scores(items)
+    verdicts = [result["verdict"] for result in results]
+    log_extra("verdict", verdicts)
+    log_extra("tests", [result["tests"] for result in results])
+    for verdict in get_args(Verdict):
+        log_metric(f"verdict/{verdict}", verdicts.count(verdict) / len(verdicts))
+    log.info("rewarded", step=trainer_state.global_step, verdicts=Counter(verdicts))
+    return results
+
+
+def post_scores(items: list[dict[str, str]]) -> list[dict]:
+    """The reward server's Result for each {task_id, completion}. Waits out an unreachable server (the SSH tunnel to the
+    Mac VM) instead of crashing; scoring is a pure function of the items, so resending is safe. HTTP errors (404/503)
+    are not transport errors and still stop the caller."""
     for attempt in Retrying(
         retry=retry_if_exception_type(httpx.TransportError),
         wait=wait_exponential(max=60),
         stop=stop_after_delay(settings.server.outage_seconds),
-        before_sleep=lambda state: log.warning("reward server unreachable", step=trainer_state.global_step,
-                                               attempt=state.attempt_number, error=repr(state.outcome.exception())),
+        before_sleep=lambda state: log.warning("reward server unreachable", attempt=state.attempt_number,
+                                               error=repr(state.outcome.exception())),
         reraise=True,
     ):
         with attempt:
             results = httpx.post(
                 str(settings.server.url), json=items, timeout=settings.server.timeout
             ).raise_for_status().json()
-    verdicts = [result["verdict"] for result in results]
-    log_extra("verdict", verdicts)
-    for verdict in get_args(Verdict):
-        log_metric(f"verdict/{verdict}", verdicts.count(verdict) / len(verdicts))
-    log.info("rewarded", step=trainer_state.global_step, verdicts=Counter(verdicts))
     return results

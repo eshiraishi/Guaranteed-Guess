@@ -33,6 +33,7 @@ class Result(BaseModel):
     returncode: int | None = None
     stderr: str = ""
     seconds: float = 0.0
+    tests: str = ""            # stdio mode: P or F per test run, in order (the run ends at a timeout); else empty
 
     @computed_field
     @property
@@ -83,23 +84,33 @@ def normalize(text: str) -> str:
 def check_stdio(asm: str, tests: list[dict[str, str]]) -> Result:
     """stdio mode: the prediction is a whole program (it defines main) and is linked alone. It passes when its stdout
     equals each test's output up to trailing whitespace. The exit status is ignored, as for a main without a return;
-    a signal is a crash. Test inputs are stored stripped, so each gets its final newline back."""
+    a signal is a crash. Test inputs are stored stripped, so each gets its final newline back. Every test runs, so
+    Result.tests records each outcome (prereg.md §2, Recording), except that a timeout ends the run; the verdict is the
+    first failure's."""
     start = time.monotonic()
     if not asm.strip():
         return Result(verdict="empty")
+    outcomes, failure = "", None
     with tempfile.TemporaryDirectory(prefix="gg-run-") as tmp:
         work = Path(tmp).resolve()
         if failure := link(work, asm, [], start):
             return failure
         for test in tests:
             p = execute(work, test["input"] + "\n")
-            if p is None:
-                return Result(verdict="timeout", seconds=time.monotonic() - start)
-            if p.returncode < 0 or normalize(p.stdout) != normalize(test["output"]):
-                signalled = "timeout" if -p.returncode == signal.SIGXCPU else "crash"
-                return Result(verdict="wrong_output" if p.returncode >= 0 else signalled, returncode=p.returncode,
-                              stderr=p.stderr[-settings.harness.stderr_tail:], seconds=time.monotonic() - start)
-    return Result(verdict="pass", seconds=time.monotonic() - start)
+            timed_out = p is None or -p.returncode == signal.SIGXCPU   # wall clock, or the CPU limit's signal
+            passed = not timed_out and p.returncode >= 0 and normalize(p.stdout) == normalize(test["output"])
+            outcomes += "P" if passed else "F"
+            if not passed and failure is None:
+                if p is None:
+                    failure = Result(verdict="timeout")
+                else:
+                    verdict = "wrong_output" if p.returncode >= 0 else "timeout" if timed_out else "crash"
+                    failure = Result(verdict=verdict, returncode=p.returncode,
+                                     stderr=p.stderr[-settings.harness.stderr_tail:])
+            if timed_out:
+                break
+    result = failure or Result(verdict="pass")
+    return result.model_copy(update={"tests": outcomes, "seconds": time.monotonic() - start})
 
 
 def check_task(asm: str, driver: str | None, tests: list[dict[str, str]] | None) -> Result:

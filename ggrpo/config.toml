@@ -128,6 +128,32 @@ max_prompt_tokens = 16256    # Enzo, Nov 7: 16,384 per side; 128 left for the ch
 max_answer_tokens = 16320    # grpo_codenet.yaml's 32,768 (the base's positions) with EOS; ~97% of CodeNet problems keep a task
 out = "data/rl/train.jsonl"
 
+[sample]   # python -m ggrpo.sample (training host GPU1, train venv): the census by default (prereg.md §2)
+model = "runs/start_fp16"
+dtype = "float16"            # the online arms sample in fp16
+tasks = "data/rl/train.jsonl"
+seed = "census-2026-11-11"   # fixed before the census; never change it once the census has run
+samples = 16
+temperature = 1.0            # grpo_codenet.yaml's sampling
+top_p = 1.0
+top_k = 0
+max_tokens = 16384           # grpo_codenet.yaml max_completion_length
+max_model_len = 32768        # grpo_codenet.yaml vllm_max_model_length
+gpu_memory_utilization = 0.85
+chunk = 64
+score_batch = 128
+stop_mixed = 1200            # above any pool cap two 1.5-day passes allow (~860)
+out = "runs/census/census.jsonl"
+
+[pool]   # python -m ggrpo.pool (Mac or training host, after the census and C-0): the pool and the SFT-scale arms' data
+census = "runs/census/census.jsonl"
+cap = 0                      # TODO from C-0's step time: two passes <= 1.5 days; a multiple of prompts_per_step
+prompts_per_step = 16
+passes = 2
+out = "data/rl/pool.jsonl"   # grpo_codenet.yaml data_files
+references = "data/sft/pool_references"
+offline_rft = "data/sft/offline_rft"
+
 [strata]   # python -m ggrpo.strata (Mac, --extra data, after ggrpo.decontam): pass rates by similarity to training
 train = ["gg"]               # GG's release trained on GG's SFT pairs only
 decontaminated = false

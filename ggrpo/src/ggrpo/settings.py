@@ -137,6 +137,35 @@ class Rl(BaseModel):
     out: Path
 
 
+class Sample(BaseModel):
+    model: Path                # model folder (the census: the fp16 RL start)
+    dtype: Literal["float16", "bfloat16"]
+    tasks: Path                # task file (jsonl with task_id and prompt)
+    seed: str                  # salt of the fixed random order, sha256(seed:task_id)
+    samples: int               # completions per task
+    temperature: float         # sampling, as grpo_codenet.yaml
+    top_p: float
+    top_k: int
+    max_tokens: int            # completion cap (grpo_codenet.yaml max_completion_length)
+    max_model_len: int
+    gpu_memory_utilization: float
+    chunk: int                 # tasks per generate-and-score round
+    score_batch: int           # completions per request to the reward server
+    limit: int | None = None   # only the first this many tasks in the order (the fixed validation subset)
+    stop_mixed: int | None = None   # stop once this many tasks have 0 < passes < samples (the census)
+    out: Path
+
+
+class Pool(BaseModel):
+    census: Path               # ggrpo.sample's rows from the census
+    cap: int                   # pool tasks (C-0's step time; a multiple of prompts_per_step)
+    prompts_per_step: int
+    passes: int
+    out: Path                  # GRPO's train file: task_id, prompt
+    references: Path           # SFT folder of the pool tasks' references
+    offline_rft: Path          # SFT folder of the pool tasks' passing census samples
+
+
 class Strata(BaseModel):
     train: list[Literal["gg", "codenet", "mbpp"]]   # document sources the scored model trained on
     decontaminated: bool       # true if it trained without the documents ggrpo.decontam drops
@@ -234,6 +263,8 @@ class Settings(BaseSettings):
     decontam: Decontam
     sft: Sft
     rl: Rl
+    sample: Sample
+    pool: Pool
     strata: Strata
     reward: Reward
     generate: Generate

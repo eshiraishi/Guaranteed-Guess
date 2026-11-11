@@ -127,6 +127,7 @@ tokenizer_revision = "0444a378f384300187c7f43914fc986a81ff051a"
 max_prompt_tokens = 16256    # Enzo, Nov 7: 16,384 per side; 128 left for the chat template, so prompt + completion fits
 max_answer_tokens = 16320    # grpo_codenet.yaml's 32,768 (the base's positions) with EOS; ~97% of CodeNet problems keep a task
 out = "data/rl/train.jsonl"
+references = "data/sft/references"   # sft_references.yaml's dataset for SFT on RL references (H2a)
 
 [sample]   # python -m ggrpo.sample (training host GPU1, train venv): the census by default (prereg.md §2)
 model = "runs/start_fp16"

@@ -1,13 +1,15 @@
 """The GRPO train file (Mac, --extra data, after ggrpo.decontam): the tasks of every file in rl.sources (MBPP-C train,
 CodeNet train), except those with a drop row for an eval item in ggrpo.decontam's output, and those whose prompt or
 reference answer is longer than rl.max_prompt_tokens or rl.max_answer_tokens under the base model's tokenizer (so
-every kept task fits GRPO's own limits). Writes task_id and prompt, the columns trl reads."""
+every kept task fits GRPO's own limits). Writes task_id and prompt, the columns trl reads, and rl.references, SFT on RL
+references' dataset (H2a): every kept task's compiler reference, as TRL prompt-completion rows."""
 import polars as pl
 import structlog
 from huggingface_hub import hf_hub_download
 from pydantic_settings import CliApp
 from tokenizers import Tokenizer
 
+from ggrpo.pool import to_sft
 from ggrpo.settings import Settings
 
 settings = CliApp.run(Settings)
@@ -37,6 +39,8 @@ tasks = tasks.with_columns(
 kept = tasks.filter(~pl.col("contaminated") & ~pl.col("too_long"))
 settings.rl.out.parent.mkdir(parents=True, exist_ok=True)
 kept.select("task_id", "prompt").write_ndjson(settings.rl.out)
+settings.rl.references.mkdir(parents=True, exist_ok=True)
+to_sft(kept, pl.format(settings.prompt.answer, "arm_ref")).write_parquet(settings.rl.references / "train.parquet")
 counts = tasks.group_by("source").agg(
     tasks=pl.len(), contaminated=pl.col("contaminated").sum(), too_long=pl.col("too_long").sum(),
     kept=(~pl.col("contaminated") & ~pl.col("too_long")).sum(),

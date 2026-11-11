@@ -135,6 +135,7 @@ class Rl(BaseModel):
     max_prompt_tokens: int
     max_answer_tokens: int     # reference answer, in GG's answer format
     out: Path
+    references: Path           # SFT folder (train.parquet: prompt, completion) of every kept task's reference, for H2a
 
 
 class Sample(BaseModel):

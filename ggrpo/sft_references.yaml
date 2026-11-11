@@ -1,0 +1,40 @@
+# TRL's config for `trl sft --config sft_references.yaml`: the SFT-scale arms, each from the SFT start (prereg.md §2).
+# - SFT on RL references (H2a, this file as is): every kept RL task's compiler reference (`python -m ggrpo.rl` writes
+#   data/sft/references); 2 passes of 16 tasks per update (~910 updates). LR from {5e-6, 1e-5, 2e-5} on val E2, one seed
+#   each (--learning_rate), then the 5 confirmatory seeds (--seed) at the chosen LR.
+# - SFT on pool references (secondary): --dataset_name data/sft/pool_references (`python -m ggrpo.pool`); 2 passes of 16
+#   is the online arms' step count; LR chosen the same way, 5 seeds.
+# - Offline RFT (descriptive, 1 seed): --dataset_name data/sft/offline_rft, the pool tasks' passing census samples, at
+#   the LR chosen for SFT on pool references.
+# Otherwise GG's recipe, as sft_redo.yaml: cosine, 10% warmup, no weight decay, clip 1.0, fp32 master with bf16 autocast.
+env:
+  WANDB_ENTITY: assembly-transpilation  # transformers' W&B callback reads both from here (config.toml [track])
+  WANDB_PROJECT: rlvr
+  HF_HUB_OFFLINE: "1"
+
+model_name_or_path: TODO                # the SFT start, runs/sft_redo_200k_v2_seed0/checkpoint-2084, after the B-gate
+dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as the SFT start
+
+dataset_name: data/sft/references       # a local folder; its train.parquet is the split
+dataset_train_split: train
+
+learning_rate: TODO                     # the grid's choice on val E2
+lr_scheduler_type: cosine
+warmup_steps: 0.1                       # a float < 1 is a ratio of total steps
+weight_decay: 0.0
+optim: adamw_torch
+max_grad_norm: 1.0
+num_train_epochs: 2
+max_length: 32768                       # 16,384 per side, as the SFT start: nothing is truncated
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 16         # 16 tasks per update, as the online arms' 16 prompts per step
+
+bf16: true
+gradient_checkpointing: true
+
+seed: 0
+report_to: [wandb]
+run_name: "SFT on RL references (GG recipe)"
+output_dir: runs/sft_references         # the launcher sets one folder per arm, LR and seed
+logging_steps: 10
+save_strategy: "no"                     # the final model only (trl sft saves it at the end); a ~1.5 h run restarts

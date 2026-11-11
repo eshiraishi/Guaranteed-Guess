@@ -1,7 +1,9 @@
-# TRL's config for `trl grpo --config grpo_codenet.yaml`: grpo.yaml's recipe on MBPP-C + CodeNet. Lines that differ
-# from grpo.yaml say so. Values marked TODO are open decisions: TRL refuses to start until they are set.
-# Random-reward control (Spurious Rewards, Shao et al., ICML 2026), the same file with:
+# TRL's config for `python -m ggrpo.record --config grpo_codenet.yaml` (`trl grpo` that saves every rollout and prunes
+# old optimizer states): grpo.yaml's recipe on MBPP-C + CodeNet. Lines that differ from grpo.yaml say so. Values marked
+# TODO are open decisions: TRL refuses to start until they are set.
+# Permuted-reward control (Spurious Rewards, Shao et al., ICML 2026), the same with:
 #   --reward_funcs ggrpo.reward.reward_random --run_name "GRPO (datasets: mbpp+codenet, reward_funcs: reward_random)"
+# Online RFT: `python -m ggrpo.positive --config grpo_codenet.yaml`.
 env:
   WANDB_ENTITY: assembly-transpilation  # transformers' W&B callback reads both from here (config.toml [track])
   WANDB_PROJECT: rlvr

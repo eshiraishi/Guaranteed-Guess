@@ -13,7 +13,7 @@ from pathlib import Path
 
 import torch
 import trl
-from transformers import TrainerCallback
+from transformers import TrainerCallback, set_seed
 from trl.scripts import grpo
 
 
@@ -31,6 +31,8 @@ class RecordingGRPOTrainer(trl.GRPOTrainer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_callback(PruneOptimizerCallback())
+        # colocated vLLM samples from the global CUDA RNG and reset it to seed 0 at warm-up; the run's seed must set it
+        set_seed(self.args.seed)
 
     def _calculate_rewards(self, inputs, prompts, completions, completion_ids_list):
         self.rewards_per_func = super()._calculate_rewards(inputs, prompts, completions, completion_ids_list)

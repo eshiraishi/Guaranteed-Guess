@@ -34,6 +34,26 @@ class RecordingGRPOTrainer(trl.GRPOTrainer):
         # colocated vLLM samples from the global CUDA RNG and reset it to seed 0 at warm-up; the run's seed must set it
         set_seed(self.args.seed)
 
+    def _get_per_token_logps_and_entropies(self, model, input_ids, attention_mask, logits_to_keep, **kwargs):
+        """TRL's log-prob forward, one row at a time without its padding: every row is as wide as its generation batch
+        (longest prompt + longest completion), so this gives the same values on fewer tokens."""
+        if kwargs.get("compute_aux_loss") or any(value is not None for key, value in kwargs.items()
+                                                 if key not in ("batch_size", "compute_entropy", "compute_aux_loss")):
+            raise ValueError(f"written for text models without an aux loss: {kwargs}")
+        logps, entropies = [], []
+        for ids, mask in zip(input_ids, attention_mask):
+            kept = mask.nonzero().flatten()
+            start, end = kept[0].item(), kept[-1].item() + 1   # prompts are left-padded, completions right-padded
+            right_pad = input_ids.size(1) - end
+            if not mask[start:end].all() or right_pad >= logits_to_keep:
+                raise ValueError(f"a row is not left padding, prompt, completion, right padding: {mask.tolist()}")
+            row_logps, row_entropies, _ = super()._get_per_token_logps_and_entropies(
+                model, ids[None, start:end], mask[None, start:end], logits_to_keep - right_pad, **kwargs)
+            logps.append(torch.nn.functional.pad(row_logps, (0, right_pad)))
+            if row_entropies is not None:
+                entropies.append(torch.nn.functional.pad(row_entropies, (0, right_pad)))
+        return torch.cat(logps), torch.cat(entropies) if entropies else None, None
+
     def _calculate_rewards(self, inputs, prompts, completions, completion_ids_list):
         self.rewards_per_func = super()._calculate_rewards(inputs, prompts, completions, completion_ids_list)
         return self.rewards_per_func

@@ -1,3 +1,4 @@
+import contextlib
 import json
 from collections import deque
 from types import SimpleNamespace
@@ -5,9 +6,47 @@ from types import SimpleNamespace
 import pytest
 
 torch = pytest.importorskip("torch")
-pytest.importorskip("trl")
+trl = pytest.importorskip("trl")
+
+from transformers import Qwen2Config, Qwen2ForCausalLM   # noqa: E402
+from trl.trainer.utils import add_fused_lm_head   # noqa: E402
 
 from ggrpo.record import PruneOptimizerCallback, RecordingGRPOTrainer   # noqa: E402
+
+
+def test_cutting_padding_keeps_log_probs_entropies_and_gradients():
+    """Three rows padded like a GRPO generation batch: prompts left-padded to 5 tokens, completions right-padded to 4.
+    Log-probs and entropies match bitwise; gradients to fp32 rounding, since TRL's fused LM head runs in fp32."""
+    torch.manual_seed(0)
+    config = Qwen2Config(vocab_size=64, hidden_size=32, intermediate_size=64, num_hidden_layers=2,
+                         num_attention_heads=4, num_key_value_heads=2, max_position_embeddings=64)
+    model = Qwen2ForCausalLM(config).double()
+    add_fused_lm_head(model, outputs=("log_probs", "entropy"))
+    trainer = RecordingGRPOTrainer.__new__(RecordingGRPOTrainer)   # the forward needs only the accelerator
+    trainer.accelerator = SimpleNamespace(autocast=contextlib.nullcontext, is_main_process=True)
+    prompt_mask = torch.tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 0, 0, 0, 1]])
+    completion_mask = torch.tensor([[1, 1, 0, 0], [1, 1, 1, 1], [1, 0, 0, 0]])
+    input_ids = torch.randint(1, 64, (3, 9), generator=torch.Generator().manual_seed(1))
+    attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)
+    results = []
+    for forward in (trl.GRPOTrainer._get_per_token_logps_and_entropies,
+                    RecordingGRPOTrainer._get_per_token_logps_and_entropies):
+        model.zero_grad()
+        logps, entropies, _ = forward(trainer, model, input_ids, attention_mask, 4, batch_size=1, compute_entropy=True)
+        (logps * completion_mask).sum().backward()
+        results.append([logps * completion_mask, entropies * completion_mask,
+                        *(parameter.grad.clone() for parameter in model.parameters())])
+    (logps_full, entropies_full, *gradients_full), (logps_cut, entropies_cut, *gradients_cut) = results
+    assert torch.equal(logps_cut, logps_full) and torch.equal(entropies_cut, entropies_full)
+    for full, cut in zip(gradients_full, gradients_cut):
+        assert (cut - full).abs().max() <= 1e-6 * full.abs().max()
+
+
+def test_padding_inside_a_row_is_refused():
+    trainer = RecordingGRPOTrainer.__new__(RecordingGRPOTrainer)
+    with pytest.raises(ValueError, match="left padding"):
+        trainer._get_per_token_logps_and_entropies(None, torch.ones(1, 4, dtype=torch.long),
+                                                   torch.tensor([[1, 0, 1, 1]]), 2)
 
 
 class FakeTokenizer:

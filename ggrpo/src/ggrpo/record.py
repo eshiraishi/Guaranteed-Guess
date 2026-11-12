@@ -8,6 +8,7 @@
 usage: python -m ggrpo.record --config grpo_codenet.yaml [any other `trl grpo` argument]
 GRPO as is; the permuted arm adds --reward_funcs ggrpo.reward.reward_random; online RFT is ggrpo.positive, which
 records the same way."""
+import importlib
 import json
 from pathlib import Path
 
@@ -97,9 +98,27 @@ class RecordingGRPOTrainer(trl.GRPOTrainer):
 
 
 def run(trainer_class: type[trl.GRPOTrainer]) -> None:
-    trl.GRPOTrainer = trainer_class   # grpo.main imports GRPOTrainer from trl when it runs
-    parser = grpo.make_parser()
-    grpo.main(*parser.parse_args_and_config(fail_with_unknown_args=False))
+    """trl.scripts.grpo.main (TRL 1.16) cut to what our configs use (a `datasets` mixture, reward functions by import
+    path), building trainer_class instead of patching trl.GRPOTrainer; unknown config keys fail."""
+    script_args, training_args, model_args, dataset_args = grpo.make_parser().parse_args_and_config()
+    reward_funcs = []
+    for path in script_args.reward_funcs:
+        module_path, name = path.rsplit(".", 1)
+        reward_funcs.append(getattr(importlib.import_module(module_path), name))
+    training_args.model_init_kwargs = {
+        "revision": model_args.model_revision, "trust_remote_code": training_args.trust_remote_code,
+        "attn_implementation": model_args.attn_implementation, "dtype": model_args.dtype,
+        **(training_args.model_init_kwargs or {}),
+    }
+    dataset = trl.get_dataset(dataset_args)
+    trainer = trainer_class(
+        model=model_args.model_name_or_path, reward_funcs=reward_funcs, args=training_args,
+        train_dataset=dataset[script_args.dataset_train_split],
+        eval_dataset=dataset[script_args.dataset_test_split] if training_args.eval_strategy != "no" else None,
+        quantization_config=trl.get_quantization_config(model_args), peft_config=trl.get_peft_config(model_args),
+    )
+    trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
+    trainer.save_model(training_args.output_dir)
 
 
 if __name__ == "__main__":

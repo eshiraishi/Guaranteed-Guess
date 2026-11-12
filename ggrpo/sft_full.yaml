@@ -1,0 +1,63 @@
+# TRL's config for `python -m ggrpo.checkpointing --config sft_full.yaml` (`trl sft` with gradient checkpointing only for
+# long rows): the full-data SFT, sft_redo.yaml's recipe on all clean pairs. Lines that differ from sft_redo.yaml say so.
+# GG's recipe (sft.yaml's header: the release's training_args win over the paper) on GG's base, with our data:
+# GG's released ARMv8 O2 pairs plus CodeNet SFT-only problems, with no RL problem (D5, Enzo, Nov 10: CodeNet train
+# and MBPP-C train out, RL tasks as decontam items), decontaminated and capped at 16,384 tokens per side
+# (`python -m ggrpo.sft`). Single target, ARMv8 macOS O2, as GG's O2 model (Enzo, Nov 7 and Nov 10).
+# Launched on totoro GPU0 by ops/lanes/sft_full.sh SEED (W&B run id, .env key, resume from the newest checkpoint).
+# Pre-registered (Enzo, Nov 10): cosine as GG.
+env:
+  WANDB_ENTITY: assembly-transpilation  # transformers' W&B callback reads both from here (config.toml [track])
+  WANDB_PROJECT: rlvr
+  HF_HUB_OFFLINE: "1"                   # use the cached snapshot (refs/main points to the pinned revision)
+
+# Model: the base-model gate (B-0, Enzo, Nov 10): GG's base
+model_name_or_path: Qwen/Qwen2.5-Coder-1.5B-Instruct
+model_revision: 2e1fd397ee46e1388853d2af2c993145b0f1098a
+dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as GG's bf16 run
+
+# Data (differs): all clean pairs, no subset. data/sft/full holds two symlinks, so nothing is copied:
+#   train.parquet -> ../train.parquet (1,087,411 rows); test.parquet -> ../val.parquet (472, as redo_200k/test.parquet).
+# Columns prompt and completion (TRL drops source and document_id). No curriculum: TRL's default shuffle.
+# TRL puts the loss on the completion only for this format, as LLaMA-Factory's default did for GG.
+# W&B shows names and paths without plan IDs (Enzo, Nov 10).
+dataset_name: data/sft/full             # a local folder: its train.parquet and test.parquet become the two splits
+dataset_train_split: train
+dataset_test_split: test
+
+# GG's release
+learning_rate: 2.0e-5
+lr_scheduler_type: cosine
+warmup_steps: 0.1                       # a float < 1 is a ratio of total steps (release: warmup_ratio 0.1)
+weight_decay: 0.0
+optim: adamw_torch_fused                # differs (Nov 12 speed study): the same AdamW update in fused kernels
+max_grad_norm: 1.0
+num_train_epochs: 2                     # 2 x ceil(1,087,411 / 192) = 11,328 updates
+max_length: 32768                       # differs from GG's 16k: 16,384 per side (Enzo, Nov 8); nothing is truncated
+per_device_train_batch_size: 1          # one sequence of up to 32k tokens per micro-batch
+gradient_accumulation_steps: 192        # GG's effective batch (8 GPUs x 12 x 2)
+
+# Validation loss, B-1's ranking metric at the end of the run [V: rank at the end, never early]
+eval_strategy: steps
+eval_steps: 0.1                         # a float < 1 is a ratio of total steps
+per_device_eval_batch_size: 1
+
+# Precision and memory. Differs (Nov 12 speed study, totoro GPU0, 40 updates of the timing mix): Liger kernels and
+# gradient checkpointing only for rows over 16,384 tokens ran 14,949 tok/s at a 62.9 GiB peak, against 10,929 tok/s
+# with sft_redo.yaml's settings; packing gave no speedup (Nov 10)
+bf16: true
+gradient_checkpointing: true            # gives each layer its checkpoint function
+gradient_checkpointing_above: 16384     # differs: ggrpo.checkpointing checkpoints only rows longer than this
+use_liger_kernel: true                  # differs
+
+# Tracking (W&B; WANDB_API_KEY from .env)
+seed: 0
+report_to: [wandb]
+run_name: "SFT full (all clean pairs, GG recipe)"
+output_dir: runs/sft_full               # sft_full.sh sets runs/sft_full_seedN
+logging_steps: 10
+
+# Checkpoints (Enzo, Nov 10): every 10% of the updates, with the validation pass, in full (optimizer and scheduler
+# state), so a crash resumes with --resume_from_checkpoint; ~19 GB each, all 10 kept (~190 GB)
+save_strategy: steps
+save_steps: 0.1                         # a float < 1 is a ratio of total steps

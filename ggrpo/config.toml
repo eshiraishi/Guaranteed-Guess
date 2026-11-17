@@ -317,3 +317,59 @@ labels = { gg = "GG (ours)", grpo-seed0 = "GRPO", dsm-seed0 = "DeepSeekMath GRPO
 grpo-seed0 = "results/training/full/trainer_state.json"
 dsm-seed0 = "results/training/dsm-seed0/trainer_state.json"
 sft-seed0 = "results/training/sft-seed0/trainer_state.json"
+
+[board]   # python -m ggrpo.board: one table of every lane, run from the Mac (Enzo, Nov 17: "so i dont have to keep asking you")
+history = "runs/board_history.tsv"
+rate_window_minutes = 30       # the rate is measured over this, never over total elapsed: the Nov 17 reward-tunnel
+                               # stall would otherwise have read the census at 3.9 tasks/min against a true 8.0
+stall_after_minutes = 10       # rows frozen this long read STALLED; beam-8 writes a row about every 90 s
+report_utc_offset_hours = 4    # logs stay UTC; the board also prints GST, which is what we talk in
+
+[board.local]   # the Mac's own half, which no remote host can see
+tart = "~/tools/tart/tart.app/Contents/MacOS/tart"   # the release tarball, never on PATH
+vm = "gg-ventura"
+helpers = ["tunnel.sh", "tunnel_guard.sh", "vm_guard.sh"]
+
+[board.hosts.totoro]
+repo = "/home/eshiraishi/ggrpo"
+ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "HostKeyAlias=totoro",
+       "-J", "eshiraishi@ponyo.tail9f8595.ts.net", "eshiraishi@totoro.mbzu.ae"]
+
+[board.hosts.ponyo]
+repo = "/home/eshiraishi/gg/ggrpo"
+ssh = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "eshiraishi@ponyo.tail9f8595.ts.net"]
+
+[[board.lanes]]
+name = "census"
+host = "totoro"
+status = "runs/census_full.status"
+rows = "runs/census/census.jsonl"
+total = 116448          # 7,278 RL tasks x 16 completions
+unit = "task"
+rows_per_unit = 16
+
+[[board.lanes]]
+name = "sampled-11328"
+host = "totoro"
+status = "runs/codenet_val_sft_full_11328.status"
+rows = "runs/sft_full_11328_codenet_val_sample8.jsonl"
+total = 3064            # 383 val problems x 8 samples
+
+[[board.lanes]]
+name = "beam8-gpu1"
+host = "totoro"
+status = "runs/codenet_val_11328/gpu1.status"
+rows = "runs/codenet_val_11328/beam8_gpu1.jsonl"
+total = 192
+
+[[board.lanes]]
+name = "beam8-ponyo"
+host = "ponyo"
+status = "runs/codenet_val_11328/ponyo.status"
+rows = "runs/codenet_val_11328/beam8_ponyo.jsonl"
+total = 191
+
+[[board.lanes]]
+name = "probe"
+host = "totoro"
+status = "runs/probe_after_census.status"

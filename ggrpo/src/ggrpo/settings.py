@@ -251,6 +251,37 @@ class Latex(BaseModel):
     trainer_states: dict[str, Path]     # run id -> TRL trainer_state.json
 
 
+class BoardHost(BaseModel):
+    ssh: list[str]            # the whole ssh command, so a jump host or a HostKeyAlias stays data, not code
+    repo: Path                # that host's checkout; every lane path below is relative to it
+
+
+class BoardLane(BaseModel):
+    name: str
+    host: str                 # a key of Board.hosts
+    status: Path              # the append-only lane status file
+    rows: Path | None = None  # the output the lane grows; None when the lane writes no rows
+    total: int = 0            # expected rows; 0 leaves the percentage and the ETA blank
+    unit: str = "row"
+    rows_per_unit: int = 1    # 16 completions per census task
+
+
+class BoardLocal(BaseModel):
+    tart: Path
+    vm: str
+    helpers: list[str]
+
+
+class Board(BaseModel):
+    hosts: dict[str, BoardHost]
+    lanes: list[BoardLane]
+    local: BoardLocal
+    history: Path
+    rate_window_minutes: int
+    stall_after_minutes: int
+    report_utc_offset_hours: int
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(toml_file="config.toml", env_file=".env")
 
@@ -275,6 +306,7 @@ class Settings(BaseSettings):
     log: Log
     track: Track
     latex: Latex | None = None               # only the Mac builds the report
+    board: Board | None = None               # only the Mac polls the lanes
 
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):

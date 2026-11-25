@@ -8,7 +8,8 @@ here=$(cd "$(dirname "$0")/../.." && pwd)
 while sleep 60; do
   t=$(grep -E 'tunnel (start|exit)|forwarding failed' "$here/runs/tunnel.log" | tail -n 9)
   [ "$(echo "$t" | grep -c 'forwarding failed')" = 3 ] && [[ $(echo "$t" | tail -n 1) == "tunnel exit"* ]] || continue
-  ssh -o BatchMode=yes -o ConnectTimeout=20 totoro.mbzu.ae 'curl -s -o /dev/null -m 10 http://127.0.0.1:8765/ && exit
+  ssh -o BatchMode=yes -o ConnectTimeout=20 -o HostKeyAlias=totoro -J eshiraishi@ponyo.tail9f8595.ts.net \
+    eshiraishi@totoro.mbzu.ae 'curl -s -o /dev/null -m 10 http://127.0.0.1:8765/ && exit
     p=$(pgrep -u $USER -xf "sshd: $USER")
     [ "$(echo "$p" | grep -c .)" = 1 ] && kill $p && echo "KILLED stale tunnel sshd $p" || echo "NOT_ONE tunnel sshd: $p"' |
     sed "s/^/$(date -u +%FT%TZ) /"

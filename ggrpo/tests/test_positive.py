@@ -1,7 +1,8 @@
 import pytest
-import torch
 
-from ggrpo.positive import get_positive_advantages
+torch = pytest.importorskip("torch")
+
+from ggrpo.positive import get_positive_advantages  # noqa: E402  (needs torch, skipped above without it)
 
 
 def test_positive_advantages_are_the_rewards_without_a_baseline():

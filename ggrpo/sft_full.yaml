@@ -34,6 +34,7 @@ optim: adamw_torch_fused                # differs (Nov 12 speed study): the same
 max_grad_norm: 1.0
 num_train_epochs: 2                     # 2 x ceil(1,087,411 / 192) = 11,328 updates
 max_length: 32768                       # differs from GG's 16k: 16,384 per side (Enzo, Nov 8); nothing is truncated
+dataset_num_proc: 8                     # tokenizing 1.09M rows on one process took ~1 h with the GPU idle (Nov 12)
 per_device_train_batch_size: 1          # one sequence of up to 32k tokens per micro-batch
 gradient_accumulation_steps: 192        # GG's effective batch (8 GPUs x 12 x 2)
 

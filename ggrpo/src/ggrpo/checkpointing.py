@@ -16,12 +16,12 @@ from trl import SFTConfig, TrlParser
 class SFTArguments:
     """The config keys besides SFTConfig's."""
     model_name_or_path: str
-    model_revision: str
     dtype: str
     dataset_name: str                   # a local folder of data files, one per split
     dataset_train_split: str
-    dataset_test_split: str
     gradient_checkpointing_above: int   # checkpoint only micro-batches longer than this many tokens
+    model_revision: str | None = None   # a hub revision; a local start folder has none, and transformers ignores it
+    dataset_test_split: str | None = None   # only an evaluating run needs one, as in record.py
 
 
 class LongInputCheckpointingSFTTrainer(trl.SFTTrainer):
@@ -45,11 +45,13 @@ def main() -> None:
     arguments, training_args = TrlParser((SFTArguments, SFTConfig)).parse_args_and_config()
     training_args.model_init_kwargs = {"revision": arguments.model_revision, "dtype": arguments.dtype}
     dataset = load_dataset(arguments.dataset_name)
+    if training_args.eval_strategy != "no" and arguments.dataset_test_split is None:
+        raise ValueError(f"eval_strategy {training_args.eval_strategy} needs dataset_test_split")
     trainer = LongInputCheckpointingSFTTrainer(
         model=arguments.model_name_or_path,
         args=training_args,
         train_dataset=dataset[arguments.dataset_train_split],
-        eval_dataset=dataset[arguments.dataset_test_split],
+        eval_dataset=dataset[arguments.dataset_test_split] if training_args.eval_strategy != "no" else None,
         gradient_checkpointing_above=arguments.gradient_checkpointing_above,
     )
     trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)

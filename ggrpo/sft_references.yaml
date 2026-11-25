@@ -12,13 +12,17 @@ env:
   WANDB_PROJECT: rlvr
   HF_HUB_OFFLINE: "1"
 
-model_name_or_path: TODO                # the SFT start, runs/sft_redo_200k_v2_seed0/checkpoint-2084, after the B-gate
+model_name_or_path: runs/sft_full_seed0  # the SFT start: the same model the GRPO run started from, so H1 and H2a
+                                        # compare arms that diverge only in what they train on (Nov 18; the 200k
+                                        # checkpoint named here before was superseded by the full-data SFT)
 dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as the SFT start
 
 dataset_name: data/sft/references       # a local folder; its train.parquet is the split
 dataset_train_split: train
 
-learning_rate: TODO                     # the grid's choice on val E2
+learning_rate: 2.0e-5                   # the anchor (GG's release and LLM4Decompile-End); the launcher passes
+                                        # --learning_rate per arm for the {5e-6, 1e-5, 2e-5} grid, and the chosen value
+                                        # replaces this line before the confirmatory seeds
 lr_scheduler_type: cosine
 warmup_steps: 0.1                       # a float < 1 is a ratio of total steps
 weight_decay: 0.0
@@ -31,6 +35,10 @@ gradient_accumulation_steps: 16         # 16 tasks per update, as the online arm
 
 bf16: true
 gradient_checkpointing: true
+gradient_checkpointing_above: 0         # every micro-batch recomputes, which is what `gradient_checkpointing: true`
+                                        # means under plain `trl sft`, the recipe this file was written for. The full
+                                        # SFT used 16384 to spare the short rows; raising it here would be faster but
+                                        # would no longer be the recipe the arm was approved with.
 
 seed: 0
 report_to: [wandb]

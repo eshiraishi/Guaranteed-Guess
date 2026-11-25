@@ -31,16 +31,29 @@ def read_pass_rate(path: Path) -> float:
 
 if __name__ == "__main__":
     api_key = settings.wandb_api_key.get_secret_value()
+    api = wandb.Api(api_key=api_key)
+    project = f"{settings.track.entity}/{settings.track.project}"
+    existing = {run.id for run in api.runs(project)}
+    training = []
     for run_id, run in settings.track.runs.items():
         if not any(path.exists() for files in run.evals.values() for path in files.values()):
             continue   # nothing scored yet: don't open an empty run before its training is copied or logged
-        with wandb.init(entity=settings.track.entity, project=settings.track.project, id=run_id, name=run.name,
+        target = run.wandb or run_id
+        # A run that is still training writes its own rows, and wandb merges a resumed process's log into the row the
+        # trainer is on, where the trainer's train/global_step wins: the eval lands on the wrong step, and the trainer
+        # keeps overwriting the summary the bar charts read (Nov 16, 5 of 6 CodeNet-val points of sft-full-seed0 landed
+        # at 10550-10580). Such a run gets `wandb` pointing at an eval run of its own; wait for any other.
+        if target in existing and api.run(f"{project}/{target}").state == "running":
+            training.append(target)
+            continue
+        with wandb.init(entity=settings.track.entity, project=settings.track.project, id=target, name=run.name,
                         resume="allow", settings=wandb.Settings(api_key=api_key)) as wb:
             wb.define_metric("eval/*", step_metric="train/global_step")   # TRL's x-axis, so evals line up with training
             logged = {(row.get("train/global_step"), key)
-                      for row in wandb.Api(api_key=api_key).run(wb.path).scan_history() for key in row}
+                      for row in api.run(wb.path).scan_history() for key in row}
             for step, files in sorted(run.evals.items()):
                 metrics = {f"eval/{metric}": read_pass_rate(path) for metric, path in files.items()
                            if path.exists() and (step, f"eval/{metric}") not in logged}   # registered before it lands
                 if metrics:
                     wb.log({"train/global_step": step} | metrics)
+    assert not training, f"still training, so not logged: {', '.join(training)}; rerun ggrpo.track once they exit"

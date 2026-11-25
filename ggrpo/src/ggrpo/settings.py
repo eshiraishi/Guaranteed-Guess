@@ -331,6 +331,7 @@ class Log(BaseModel):
 class TrackRun(BaseModel):
     name: str
     evals: dict[int, dict[str, Path]]   # train/global_step -> metric -> scored file
+    wandb: str | None = None   # W&B run the evals go to, when the training run must not be written to; else the key
 
 
 class Track(BaseModel):
@@ -338,6 +339,7 @@ class Track(BaseModel):
     project: str
     exclude: list[str]
     export: Path
+    report: str | None = None           # the dashboard's url; ggrpo.dashboard rewrites that report instead of a new one
     runs: dict[str, TrackRun]           # W&B run id -> run
 
 

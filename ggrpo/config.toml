@@ -315,6 +315,8 @@ entity = "assembly-transpilation"      # grpo.yaml WANDB_ENTITY
 project = "rlvr"                       # grpo.yaml WANDB_PROJECT
 exclude = ["satomi"]                   # BringUp: its reference never builds (helpers miss -I../common); the paper scores 65 of 66
 export = "results/paper/evals.csv"
+# python -m ggrpo.dashboard rewrites this report in place; without it every run would publish a fresh url
+report = "https://forge.coreweave.com/assembly-transpilation/rlvr/reports/GG-RLVR---one-dashboard--VmlldzoxODMyOTA5Nw=="
 
 # Run ids are set by the launcher (WANDB_RUN_ID); names are the recipe, seeds live in the run config.
 # Metrics are eval/<benchmark>_<decoding>, all pass@1; sample8 is the dev diagnostic, not a reported metric.
@@ -327,6 +329,8 @@ humaneval_beam8 = "results/humaneval/modern/modern_beam_search.scored.jsonl"
 humaneval_sample8 = "results/grpo_eval/base_humaneval_sample8.scored.jsonl"
 bringup_beam8 = "results/grpo_eval/base_bringup_beam8_rtx5000.scored.jsonl"
 bringup_greedy = "results/grpo_eval/base_bringup_greedy_rtx5000.scored.jsonl"
+codenet_val_beam8 = "results/codenet_val/gg_base_beam8_t517.scored.jsonl"   # the 2026-11-15 rerun under 5.17 (65/383, 0 flips)
+codenet_val_sample8 = "results/codenet_val/gg_base_sample8.scored.jsonl"
 
 [track.runs.grpo-seed0]
 name = "GRPO"
@@ -399,6 +403,34 @@ dev_sample8 = "results/grpo_eval/sft-seed0/108_dev_sample8.scored.jsonl"
 humaneval_beam8 = "results/grpo_eval/sft-seed0/checkpoint-108_humaneval.scored.jsonl"
 bringup_beam8 = "results/grpo_eval/sft-seed0/checkpoint-108_bringup_beam8.scored.jsonl"
 bringup_greedy = "results/grpo_eval/sft-seed0/checkpoint-108_bringup_greedy.scored.jsonl"
+
+[track.runs.sft-full-seed0]   # the full-data SFT (sft_full.yaml): 11,328 updates, a checkpoint and eval every 10%
+name = "SFT full evals (all clean pairs, GG recipe)"
+# The evals go to a run of their own: logging them into the training run while it was running merged them into the
+# trainer's rows at the wrong step and left them out of the summary the bar charts read (Nov 16).
+wandb = "sft-full-seed0-evals"
+[track.runs.sft-full-seed0.evals.1133]
+codenet_val_sample8 = "results/codenet_val/sft_full_1133_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.2266]
+codenet_val_sample8 = "results/codenet_val/sft_full_2266_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.3399]
+codenet_val_sample8 = "results/codenet_val/sft_full_3399_sample8.scored.jsonl"
+codenet_val_beam8 = "results/codenet_val/sft_full_3399_beam8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.4532]
+codenet_val_sample8 = "results/codenet_val/sft_full_4532_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.5665]
+codenet_val_sample8 = "results/codenet_val/sft_full_5665_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.6798]
+codenet_val_sample8 = "results/codenet_val/sft_full_6798_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.7931]
+codenet_val_sample8 = "results/codenet_val/sft_full_7931_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.9064]
+codenet_val_sample8 = "results/codenet_val/sft_full_9064_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.10197]
+codenet_val_sample8 = "results/codenet_val/sft_full_10197_sample8.scored.jsonl"
+[track.runs.sft-full-seed0.evals.11328]
+codenet_val_sample8 = "results/codenet_val/sft_full_11328_sample8.scored.jsonl"
+codenet_val_beam8 = "results/codenet_val/sft_full_11328_beam8.scored.jsonl"
 
 [latex]   # python -m ggrpo.latex: the report's numbers and figures, from the [track] evals and the training logs
 out = "report/midpoint/generated"

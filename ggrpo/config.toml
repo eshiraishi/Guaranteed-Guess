@@ -177,12 +177,20 @@ max_model_len = 32768        # grpo_codenet.yaml vllm_max_model_length
 gpu_memory_utilization = 0.85
 chunk = 64
 score_batch = 128
-stop_mixed = 1200            # above any pool cap two 1.5-day passes allow (~860)
+stop_mixed = 100000          # Enzo, Nov 17: "All 7,278" -- above any reachable count, so the census runs every RL
+                             # task and ends on "no task left to claim". The pool is a prefix (mixed.head(cap) in rank
+                             # order), so this cannot change which 864 tasks the planned run trains on; it only means
+                             # the pool size never has to be reopened, and the mixed rate is measured on all 7,278.
+                             # Was 960 = pool.cap 864 plus 11% margin (Nov 16); 1200 was sized for Package A's 13 runs.
+                             # Measured rate on the final model: 36% mixed over the first 128 tasks, not the ~20% the
+                             # checkpoint sweep projected, so the full census is ~7,278 tasks x 16 completions
 out = "runs/census/census.jsonl"
 
 [pool]   # python -m ggrpo.pool (Mac or training host, after the census and C-0): the pool and the SFT-scale arms' data
 census = "runs/census/census.jsonl"
-cap = 0                      # TODO from C-0's step time: two passes <= 1.5 days; a multiple of prompts_per_step
+cap = 2944                   # Enzo, Nov 18: every mixed task the census found, rounded down to a multiple of
+                             # prompts_per_step (2,954 mixed, 10 dropped). The run was launched with this value; 864
+                             # was the Nov 16 figure from the time budget, before the census finished
 prompts_per_step = 16
 passes = 2
 out = "data/rl/pool.jsonl"   # grpo_codenet.yaml data_files

@@ -1,5 +1,7 @@
 """Decontamination (Mac, --extra data): which training documents leak an eval item or an RL-train task.
-Eval items: the tasks of every file in decontam.evals (MBPP-C dev, HumanEval-C, CodeNet val and test) and BringUp.
+Eval items: the tasks of every file in decontam.evals (MBPP-C dev, HumanEval-C, CodeNet val and test) and BringUp,
+and of decontam.c_items, task files that carry their own C (the Codeforces candidates; that run writes its own
+--decontam.out, and ggrpo.codeforces_tasks drops the matching Codeforces problems, not the documents).
 RL items (set "rl", D5, Enzo, Nov 10): the tasks of every file in rl.sources (MBPP-C train, CodeNet train). Their drops
 keep RL problems out of SFT; ggrpo.rl ignores them. Budgets: decontam.budget for eval items over every document (as
 approved Nov 8), decontam.budget_sft for eval and RL items together over the SFT documents (GG, CodeNet sft_only).
@@ -161,7 +163,7 @@ def read_evals() -> pl.DataFrame:
     """Eval items as (item_id, set, x86, c)."""
     tasks = pl.concat([
         *(pl.read_ndjson(path).select(item_id="task_id", set=pl.lit(path.stem), x86=x86)
-          for path in settings.decontam.evals),
+          for path in [*settings.decontam.evals, *settings.decontam.c_items]),
         *(pl.read_ndjson(path).select(item_id="task_id", set=pl.lit("rl"), x86=x86) for path in settings.rl.sources),
         pl.read_parquet(settings.decontam.bringup.download() / "data").select(
             item_id=pl.format("bringup/{}", pl.col("file").str.strip_suffix(".s")), set=pl.lit("bringup"), x86="x86"
@@ -178,7 +180,9 @@ def read_evals() -> pl.DataFrame:
          for folder in settings.decontam.bringup_c.iterdir() if any(folder.glob("*.c"))],
         schema={"item_id": pl.String, "c": pl.String}, orient="row",
     )
-    return tasks.join(pl.concat([humaneval, read_mbpp_c(), codenet, bringup]), on="item_id", how="left", validate="1:1")
+    own = [pl.read_ndjson(path).select(item_id="task_id", c="c") for path in settings.decontam.c_items]   # Codeforces
+    return tasks.join(pl.concat([humaneval, read_mbpp_c(), codenet, bringup, *own]), on="item_id", how="left",
+                      validate="1:1")
 
 
 def read_canaries() -> tuple[pl.DataFrame, pl.DataFrame]:

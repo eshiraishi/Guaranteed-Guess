@@ -73,6 +73,40 @@ class HubDataset(BaseModel):
                                       allow_patterns=self.files))
 
 
+class Codeforces(BaseModel):
+    """The Codeforces eval set (Enzo, Nov 22): evaluation only, never trained on or redistributed."""
+    problems: HubDataset
+    submissions: HubDataset
+    languages: list[str]       # programmingLanguage values that are C
+    solutions: int             # distinct accepted solutions built per problem, in pick order
+    seed: str                  # salt of the pick order and the split: never change it once the test split has been used
+    split: dict[str, float]    # fraction of problem groups per split
+    max_cpu: float             # CPU seconds the reference may use on its slowest test
+    dissent: float             # a problem is multi-answer when >= 2 and this share of the finishing solutions disagree
+    out: Path                  # ggrpo.codeforces: one row per problem
+    built: Path                # ggrpo.codeforces_build (VM): parts of one row per built solution
+    chunk: int                 # problems per part
+    candidates: Path           # every solution that passed everything in the VM, in task format, for ggrpo.decontam
+    decontam: Path             # ggrpo.decontam's pairs for the candidates (--decontam.out)
+    decontam_items: Path       # and its items (--decontam.items): proves the run covered every reference
+    workers: int               # ggrpo.codeforces_tasks's reference check on the scoring host
+    tasks: dict[str, Path]     # ggrpo.codeforces_tasks: task files per split
+    eval: Path                 # official tests of the kept problems, read by ggrpo.official
+    drops: Path                # one row per problem: kept, or why it was dropped
+
+
+class Aoj(BaseModel):
+    problems: HttpUrl      # Main API problem list
+    testcases: HttpUrl     # Data API
+    codenet: HubDataset    # accepted C submissions (CodeNet, C subset)
+    metadata: HubDataset   # CodeNet problem titles and one sample case
+    language: str          # CodeNet original_language of Aizu C submissions
+    delay: float           # seconds between requests
+    only: list[Path]       # CodeNet task files whose problems to crawl; [] crawls every AOJ problem
+    cache: Path            # every response, so a rerun requests nothing it already has
+    out: Path
+
+
 class Codenet(BaseModel):
     submissions: HubDataset    # accepted C submissions (CodeNet, C subset)
     metadata: HubDataset       # statements, with every sample case, and titles
@@ -100,6 +134,7 @@ class Decontam(BaseModel):
     drop_asm: float            # asm score from which a document is left out
     drop_c: float              # c score from which a document is left out
     evals: list[Path]          # eval task files (jsonl with task_id and prompt)
+    c_items: list[Path]        # eval task files that carry each item's C in a c column (Codeforces candidates)
     bringup: HubDataset        # GG's BringUp bench
     bringup_c: Path            # its C sources, one folder per program
     gg: HubDataset             # GG's SFT pairs
@@ -291,6 +326,8 @@ class Settings(BaseSettings):
     server: Server
     harness: Harness
     build: Build
+    codeforces: Codeforces
+    aoj: Aoj
     codenet: Codenet
     decontam: Decontam
     sft: Sft

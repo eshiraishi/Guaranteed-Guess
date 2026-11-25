@@ -59,6 +59,39 @@ opt = "-O2"
 workers = 8
 out = "data/mbpp_armv8_O2.parquet"
 
+[codeforces]   # Codeforces eval set (Enzo, Nov 22): evaluation only; tests never trained on, rewarded or redistributed
+# python -m ggrpo.codeforces (Mac, --extra data): problems with complete official tests x accepted GNU C solutions
+problems = { repo = "open-r1/codeforces", revision = "fbe3f6e903ee854eec2e69e9d96d0306cde59baf", files = "data/*.parquet" }
+submissions = { repo = "open-r1/codeforces-submissions", revision = "07e7bf31f284b0e90e02dfc7ab675d5821e1c068", files = "data/*.parquet" }
+languages = ["GNU C", "GNU C11"]
+solutions = 10                        # Enzo, Nov 22: built per problem, in pick order; the reference and the agreement voters
+seed = "codeforces-2026-11-22"        # salt of the pick order and the split: never change it once the test split is used
+split = { val = 0.5, test = 0.5 }     # Enzo, Nov 22: 50/50 by problem group (never trained on, so no train share)
+max_cpu = 1.0                         # Enzo, Nov 22: reference's slowest test, 5x under harness.cpu_seconds
+dissent = 0.2                         # Enzo, Nov 22: multi-answer when >= 2 and >= 20% of the finishing solutions disagree
+out = "data/contest/codeforces.parquet"
+built = "data/contest/codeforces_built"           # python -m ggrpo.codeforces_build (VM), in parts
+chunk = 50
+candidates = "data/contest/codeforces_candidates.jsonl"   # written by the build; ggrpo.decontam's items
+decontam = "data/contest/codeforces_decontam.parquet"     # ggrpo.decontam --decontam.out for the candidates
+decontam_items = "data/contest/codeforces_decontam_items.parquet"   # and its --decontam.items
+workers = 6
+# python -m ggrpo.codeforces_tasks (Mac, --extra data, after the build and the decontamination run)
+tasks = { val = "data/codeforces/val.jsonl", test = "data/codeforces/test.jsonl" }
+eval = "data/contest/codeforces_eval.parquet"
+drops = "data/contest/codeforces_drops.parquet"
+
+[aoj]   # python -m ggrpo.aoj (Mac): CodeNet's accepted C for Aizu problems x AOJ's official tests (developers.u-aizu.ac.jp)
+problems = "https://onlinejudge.u-aizu.ac.jp/api/problems"
+testcases = "https://judgedat.u-aizu.ac.jp/testcases"
+codenet = { repo = "iNeil77/CodeNet", revision = "1e28cfa9f8eb2df763ad2514af11afd6e92dd07a", files = "C/*.parquet" }
+metadata = { repo = "Elfsong/codenet_metadata", revision = "b0e26431ba12f23ce6a4e4baf50980407cedcf54", files = "data/*.parquet" }
+language = "C"          # CodeNet original_language of Aizu C submissions
+delay = 1.0
+only = ["data/codenet/val.jsonl", "data/codenet/test.jsonl"]   # full judge tests for the eval splits (Enzo, Nov 10)
+cache = "data/contest/aoj_cache"
+out = "data/contest/aoj_eval.parquet"
+
 [codenet]   # python -m ggrpo.codenet (Mac, --extra data): CodeNet's accepted C x the sample cases in its statements
 submissions = { repo = "iNeil77/CodeNet", revision = "1e28cfa9f8eb2df763ad2514af11afd6e92dd07a", files = "C/*.parquet" }
 metadata = { repo = "Elfsong/codenet_metadata", revision = "b0e26431ba12f23ce6a4e4baf50980407cedcf54", files = "data/*.parquet" }
@@ -86,6 +119,7 @@ report = 0.2                 # scores from here are written (for the paper's swe
 drop_asm = 0.5               # asm rule: leave out documents from this score
 drop_c = 0.33                # c rule: leave out documents from this score (the survey's manually reviewed line)
 evals = ["data/dev.jsonl", "data/eval.jsonl", "data/codenet/val.jsonl", "data/codenet/test.jsonl"]
+c_items = []                 # task files that carry their C (Codeforces: [codeforces] candidates, with their own --decontam.out)
 bringup = { repo = "ahmedheakl/gg-bench-bringup-O2", revision = "ae6623a3f86a0d33e20d83f84f4989ea9ce61410", files = "data/*.parquet" }
 bringup_c = "../eval/bringup-bench"
 gg = { repo = "ahmedheakl/gg-armv8-O2-instruct", revision = "5c98f387f25cb4e0bec390e8f1c080e4a02414de", files = "data/*.parquet" }

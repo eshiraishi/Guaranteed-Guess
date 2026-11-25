@@ -4,11 +4,14 @@
 and before this session read any Phase 1 E2 of an RL checkpoint.** The git commit time of this file is the timestamp.
 It supersedes the selection rule in `ops/lanes/blackwell_queue.sh` (held Nov 20) and the Phase 2 rule of the action plan
 (Obsidian, "GG RLVR action plan after the first runs"). Test, HumanEval-C and BringUp are not used for anything here.
+**Amended Nov 22, 2026 (Enzo):** §1 and §4 follow `prereg.md`'s amended pass, because the differential suite failed its
+AOJ check (Nov 21). Any setting chosen under the old pass is chosen again under this one. The GRPO E1/E2 values seen
+under AOJ's official tests (Nov 21–22) were on validation and select nothing.
 
 ## 1. Pass and metric
-- **Pass:** the registered pass of `prereg.md` §4: sample tests, then the differential suite with the x86 voter
-  (`data/codenet/differential_val_x86.jsonl`) on every sample-test pass whose problem has a usable suite
-  (`ggrpo.recheck`). Sample tests alone are reported but never select.
+- **Pass:** the sample tests (`prereg.md` §4, amended Nov 22); selection uses it on all 383 val tasks. **Official
+  pass:** sample tests and the official tests, on the 107 AOJ val tasks and the 359 Codeforces val tasks, pooled
+  (Codeforces added Nov 22, before any Codeforces val number was read); reported next to every candidate, used by the stop rule (§4). The differential suite is not used.
 - **E2:** per task, the fraction of 16 samples that pass; averaged over the 383 CodeNet val tasks. pass@k (k = 1..16)
   comes from the same files with the unbiased estimator; it is descriptive.
 
@@ -34,7 +37,8 @@ its best temperature, not at the training temperature.
 
 ## 4. Development gate for H1 (stop rule)
 GRPO at its chosen (LR, horizon, temperature) against the SFT start at its chosen temperature, on E2 under the
-registered pass, with a task-paired 95% bootstrap interval of the difference. If the lower bound is at or below 0, the
+pass and again on the 107 AOJ and 359 Codeforces val tasks, pooled, under the official pass, each with a task-paired 95% bootstrap interval of the
+difference. If either lower bound is at or below 0, the
 GRPO path stops for ICML 2027 and the results are reported as they are. The gate is a go/no-go on validation; because
 the same validation tasks chose the settings, its estimate is optimistic and is not a claim. The claims come from the
-confirmatory runs (fresh seeds) on test, where E1 (beam 8, registered pass) stays the primary endpoint, as registered.
+confirmatory runs (fresh seeds) on test, where E1 (beam 8) stays the primary endpoint and H1 also needs the official pass (`prereg.md` §5).

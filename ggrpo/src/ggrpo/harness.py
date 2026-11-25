@@ -67,10 +67,10 @@ def link(work: Path, asm: str, objects: list[Path], start: float) -> Result | No
     return None
 
 
-def execute(work: Path, stdin: str | None = None) -> subprocess.CompletedProcess | None:
-    """Run work/a.out sandboxed, with the resource limits; None when it hits the wall-clock timeout."""
+def execute(work: Path, stdin: str | None = None, program: str = "./a.out") -> subprocess.CompletedProcess | None:
+    """Run a program in work sandboxed, with the resource limits; None when it hits the wall-clock timeout."""
     try:
-        return run(["sandbox-exec", "-f", settings.harness.sandbox.resolve(), "-D", f"WORKDIR={work}", "./a.out"],
+        return run(["sandbox-exec", "-f", settings.harness.sandbox.resolve(), "-D", f"WORKDIR={work}", program],
                    cwd=work, timeout=settings.harness.run_timeout, preexec_fn=set_limits, input=stdin)
     except subprocess.TimeoutExpired:
         return None

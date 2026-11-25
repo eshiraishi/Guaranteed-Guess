@@ -1,3 +1,5 @@
+# Superseded Nov 11 2026: the config gate chose grpo_codenet.yaml (constant LR after 10 warmup steps, truncated
+# completions kept, no fp32 output layer, 16 x 8 per step). Kept for the record.
 # TRL's config for `trl grpo --config grpo_codenet_lit.yaml`: grpo_codenet.yaml with the starting values from published
 # runs (report "GRPO starting values from literature", Nov 7, 2026). Lines that differ from grpo_codenet.yaml say so,
 # with their source. The config gate (docs/paper-plan/06-schedule.md C-0) decides between the two files.
@@ -11,10 +13,10 @@ env:
   HF_HUB_OFFLINE: "1"                   # vLLM loads the repo id without a revision: use the cached snapshot
 
 # Model
-model_name_or_path: TODO                # the base-model gate (docs/paper-plan/06-schedule.md B-0); grpo.yaml: GG's checkpoint
-model_revision: TODO
-dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as GG's bf16 mixed-precision SFT
-cast_lm_head_to_fp32: true              # differs: LM head outside autocast in the trainer (ScaleRL, ICLR 2026; MiniMax-M1); vLLM's stays bf16
+model_name_or_path: runs/start_fp16    # config.toml fp16.out, from `python -m ggrpo.fp16` on the base-model gate's (B-0) checkpoint
+model_revision: main                    # a local folder has no revisions; config.toml fp16.model names the source
+dtype: float32                          # fp32 master weights with fp16 autocast (`fp16`)
+cast_lm_head_to_fp32: true              # differs: LM head outside autocast in the trainer (ScaleRL, ICLR 2026; MiniMax-M1); vLLM's stays fp16
 
 # Data and reward
 datasets:
@@ -51,7 +53,8 @@ use_vllm: true
 vllm_mode: colocate
 
 # Precision and memory
-bf16: true
+bf16: false                             # fp16 here and in vLLM (src/ggrpo/fp16.py): in bf16 the trainer's and vLLM's
+fp16: true                              # log-probs drift apart with length (pilot, Nov 10: mean IS ratio 0.45-0.49 at ~8k tokens; fp16 1.01-1.02)
 gradient_checkpointing: true
 
 # Tracking (W&B; WANDB_API_KEY from .env, see ops/lanes/full_seed.sh): every argument here, seed included, becomes

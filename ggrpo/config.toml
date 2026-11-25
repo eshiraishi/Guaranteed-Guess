@@ -197,6 +197,10 @@ out = "data/rl/pool.jsonl"   # grpo_codenet.yaml data_files
 references = "data/sft/pool_references"
 offline_rft = "data/sft/offline_rft"
 
+[fp16]   # python -m ggrpo.fp16 (training host, before the census and the GRPO runs): the RL starting model as TRL's vLLM loads it, in fp16
+model = "runs/sft_full_seed0"  # the full-data SFT final model (prereg §2 Start; written by save_model at the end)
+out = "runs/start_fp16"      # grpo_codenet*.yaml model_name_or_path
+
 [strata]   # python -m ggrpo.strata (Mac, --extra data, after ggrpo.decontam): pass rates by similarity to training
 train = ["gg"]               # GG's release trained on GG's SFT pairs only
 decontaminated = false

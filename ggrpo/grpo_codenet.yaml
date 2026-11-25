@@ -10,14 +10,14 @@ env:
   HF_HUB_OFFLINE: "1"                   # vLLM loads the repo id without a revision: use the cached snapshot
 
 # Model
-model_name_or_path: TODO                # the base-model gate (docs/paper-plan/06-schedule.md B-0); grpo.yaml: GG's checkpoint
-model_revision: TODO
-dtype: float32                          # fp32 master weights with bf16 autocast (`bf16`), as GG's bf16 mixed-precision SFT
+model_name_or_path: runs/start_fp16    # differs: config.toml fp16.out, from `python -m ggrpo.fp16` on the base-model gate's (B-0) checkpoint; grpo.yaml: GG's checkpoint
+model_revision: main                    # a local folder has no revisions; config.toml fp16.model names the source
+dtype: float32                          # fp32 master weights with fp16 autocast (`fp16`)
 
 # Data and reward
 datasets:
   - path: json
-    data_files: data/rl/train.jsonl     # differs: written by `python -m ggrpo.rl` (MBPP-C + CodeNet train, decontaminated)
+    data_files: data/rl/pool.jsonl      # differs: the census's pool (prereg.md §2); data/rl/train.jsonl holds every RL task
     columns: [prompt, task_id]
 reward_funcs: [ggrpo.reward.reward_pass]
 
@@ -25,12 +25,19 @@ reward_funcs: [ggrpo.reward.reward_pass]
 num_generations: 8
 loss_type: dapo                         # TRL default; normalizes over the global accumulated batch, so accumulation is exact
 beta: 0.0
-learning_rate: 1.0e-6                   # TRL GRPO default; decays linearly to 0 (transformers default lr_scheduler_type)
-max_steps: TODO                         # differs: 2 epochs as in grpo.yaml = 2 x (rows of data/rl/train.jsonl // 16)
-per_device_train_batch_size: 1          # differs: sequences up to 32k tokens (grpo.yaml: 8 OOMed at 4k); UNTESTED: memory pilot on the longest batch first
+learning_rate: 1.0e-6                   # TRL GRPO default
+lr_scheduler_type: constant_with_warmup  # differs (Nov 11): constant, as in DAPO, so a run can continue from its final state
+warmup_steps: 10                        # differs (Nov 11): about a tenth of the then-planned 108-step run, kept as is at
+                                        # 184 steps rather than rescaled -- warmup guards the first updates, not a fraction
+max_steps: 184                          # differs: one pass over the whole pool = 2944 // 16 (Enzo, Nov 18: use every mixed
+                                        # task the census found). A second pass continues from step 184's checkpoint,
+                                        # which the constant LR below makes exact rather than an approximation
+per_device_train_batch_size: 1          # differs: sequences up to 32k tokens (grpo.yaml: 8 OOMed at 4k). Proven on Nov 17:
+                                        # runs/probe_memory.status EXIT 0, two updates on the 16 longest prompts, no OOM,
+                                        # 1,172 s/step on that worst batch (an upper bound, not the run's rate)
 gradient_accumulation_steps: 128        # differs: still 16 prompts x 8 completions = 128 per update
 max_completion_length: 16384            # differs (Enzo, Nov 7): config.toml rl.max_answer_tokens + EOS margin; ~97% of CodeNet problems kept
-mask_truncated_completions: true
+mask_truncated_completions: false       # differs (Nov 11): truncated completions stay in the update with reward 0 (paper §5.3)
 vllm_max_model_length: 32768            # differs: the base's max_position_embeddings; rl.max_prompt_tokens leaves room for the template
 
 # Sampling, explicit so nothing comes from the checkpoint's generation_config.json; config.toml [generate.sample] matches
@@ -44,7 +51,8 @@ use_vllm: true
 vllm_mode: colocate
 
 # Precision and memory
-bf16: true
+bf16: false                             # differs: fp16 here and in vLLM (src/ggrpo/fp16.py): in bf16 the trainer's and vLLM's
+fp16: true                              # log-probs drift apart with length (pilot, Nov 10: mean IS ratio 0.45-0.49 at ~8k tokens; fp16 1.01-1.02)
 gradient_checkpointing: true
 
 # Tracking (W&B; WANDB_API_KEY from .env, see ops/lanes/full_seed.sh): every argument here, seed included, becomes
@@ -55,4 +63,6 @@ run_name: "GRPO (datasets: mbpp+codenet)"
 output_dir: runs/codenet
 logging_steps: 1
 log_completions: true
-save_steps: TODO                        # grpo.yaml: about every half epoch (27 of 106 steps)
+save_steps: 46                          # differs (Nov 11): max_steps / 4; full state saved, older optimizer states pruned.
+                                        # 46 divides max_steps, so the final step is itself a full-state checkpoint and a
+                                        # second pass resumes from it without losing steps (Enzo, Nov 18)

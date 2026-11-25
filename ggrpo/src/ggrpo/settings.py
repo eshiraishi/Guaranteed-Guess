@@ -220,6 +220,11 @@ class Strata(BaseModel):
     out: Path
 
 
+class Fp16(BaseModel):
+    model: Path                # folder of the RL starting model
+    out: Path                  # its fp16 view for TRL's vLLM
+
+
 class Reward(BaseModel):
     random_probability: float  # reward_stub's chance of 1.0
     seed: int
@@ -390,6 +395,7 @@ class Settings(BaseSettings):
     rl: Rl
     sample: Sample
     pool: Pool
+    fp16: Fp16
     strata: Strata
     reward: Reward
     generate: Generate

@@ -260,6 +260,52 @@ class Equivalence(BaseModel):
     reference: Path
 
 
+class Differential(BaseModel):
+    tasks: Path                # the task file whose problems get a suite
+    solutions: Path            # CodeNet accepted C solutions, the voters on a candidate input
+    out: Path
+    mutations: int             # single-token mutations of the sample inputs per problem
+    boundaries: int            # single-token boundary substitutions per problem
+    voters: int                # solutions that must agree on a kept input
+    voter_attempts: int        # solutions compiled while looking for that many voters
+    min_kept: int              # fewer kept inputs than this and the problem keeps its sample tests
+    max_output_bytes: int
+    workers: int
+
+
+class Recheck(BaseModel):
+    scored: Path               # a .scored.jsonl with task_id, passed and the generation column
+    column: str                # the column holding the generation ("completion" in a .scored.jsonl)
+    suites: Path               # ggrpo.differential output
+    out: Path
+    workers: int
+
+
+class Calibration(BaseModel):
+    completions: Path
+    column: str                # "completion" (already extracted) or "raw"
+    suites: Path
+    official: Path             # AOJ official tests, keyed by CodeNet problem id
+    out: Path
+    workers: int
+
+
+class Official(BaseModel):
+    scored: Path               # a file scored on sample tests (rows with task_id, passed and the completion column)
+    column: str                # "completion" (already extracted) or "raw"
+    official: list[Path]       # official tests: AOJ's (keyed by CodeNet problem id) and Codeforces' (by problem id)
+    out: Path
+    workers: int
+
+
+class X86(BaseModel):
+    suites: Path               # ggrpo.differential output
+    tasks: Path                # the task file whose prompts hold the x86 source
+    out: Path
+    host: str                  # the gg-ventura VM, the only place Rosetta 2 still runs macOS binaries
+    worker: Path               # the VM-side script, copied there on every run
+
+
 class Log(BaseModel):
     file: Path
 
@@ -340,6 +386,11 @@ class Settings(BaseSettings):
     score: Score
     paper: Paper
     equivalence: Equivalence
+    differential: Differential
+    recheck: Recheck
+    calibration: Calibration
+    official: Official
+    x86: X86
     log: Log
     track: Track
     latex: Latex | None = None               # only the Mac builds the report

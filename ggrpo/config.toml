@@ -248,6 +248,47 @@ max_tokens = 8192     # prompt + completion; longer sequences are skipped (full-
 out = "runs/equivalence/paper_flash.jsonl"
 reference = "runs/equivalence/paper_flash.jsonl"   # compared against when it exists and differs from out
 
+[differential]   # python -m ggrpo.differential (Mac or VM): the stronger stdio suite (prereg.md §4)
+tasks = "data/codenet/val.jsonl"
+solutions = "data/codenet/solutions.parquet"
+out = "data/codenet/differential_val.jsonl"
+mutations = 150
+boundaries = 50
+voters = 30
+voter_attempts = 60
+min_kept = 20
+max_output_bytes = 4096
+workers = 6
+
+[recheck]   # python -m ggrpo.recheck: the sample tests' false-pass rate under the differential suite
+scored = "results/codenet_val/sft_full_11328_beam8.scored.jsonl"
+column = "completion"
+suites = "data/codenet/differential_val.jsonl"
+out = "results/codenet_val/sft_full_11328_beam8.recheck.jsonl"
+workers = 6
+
+[calibration]   # python -m ggrpo.calibration: the differential suite against AOJ's official tests (prereg.md §4)
+completions = "results/codenet_val/gg_base_sample8.jsonl"
+column = "raw"
+suites = "data/codenet/differential_val.jsonl"
+official = "data/contest/aoj_eval.parquet"
+out = "results/codenet_val/gg_base_sample8.calibration.jsonl"
+workers = 6
+
+[official]   # python -m ggrpo.official: sample tests, then the official tests on AOJ and Codeforces problems (prereg.md §4)
+scored = "results/codenet_val/sft_full_11328_beam8.scored.jsonl"
+column = "completion"
+official = ["data/contest/aoj_eval.parquet", "data/contest/codeforces_eval.parquet"]   # Codeforces built Nov 22
+out = "results/codenet_val/official/sft_full_11328_beam8.jsonl"
+workers = 6
+
+[x86]   # python -m ggrpo.x86: the x86 source as the third voter, run under Rosetta in the VM (prereg.md §4)
+suites = "data/codenet/differential_val.jsonl"
+tasks = "data/codenet/val.jsonl"
+out = "data/codenet/differential_val_x86.jsonl"
+host = "admin@192.168.64.2"
+worker = "ops/vm/x86_worker.py"
+
 [log]
 file = "runs/ggrpo.jsonl"
 

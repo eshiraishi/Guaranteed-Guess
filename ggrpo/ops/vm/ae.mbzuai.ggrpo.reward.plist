@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The reward server inside the gg-ventura VM, as a boot-time daemon (Enzo, Nov 17: "Yes, add it").
+
+  Nothing in the VM autostarted ggrpo.server, so every VM stop cost hours: the Blackwell kept generating completions
+  it could not score (Nov 14, 6.6 h; Nov 17, 2.5 h of the census and the 11328 eval). A LaunchDaemon rather than a
+  LaunchAgent because it must come up at boot whether or not admin has a console session, and KeepAlive restarts the
+  server if it ever exits on its own. It does not help when the VM itself stops -- ops/lanes/vm_guard.sh covers that.
+
+  WorkingDirectory matters: ggrpo.settings reads config.toml relative to the cwd, and that is where server.host and
+  server.port come from. Install with ops/lanes/install_vm_daemon.sh.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>              <string>ae.mbzuai.ggrpo.reward</string>
+  <key>UserName</key>           <string>admin</string>
+  <key>WorkingDirectory</key>   <string>/Users/admin/ggrpo</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/admin/ggrpo/.venv/bin/python</string>
+    <string>-m</string>
+    <string>ggrpo.server</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key> <string>/Users/admin</string>
+    <key>PATH</key> <string>/Users/admin/ggrpo/.venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>          <true/>
+  <key>KeepAlive</key>          <true/>
+  <key>ThrottleInterval</key>   <integer>10</integer>
+  <key>StandardOutPath</key>    <string>/Users/admin/server.log</string>
+  <key>StandardErrorPath</key>  <string>/Users/admin/server.log</string>
+</dict>
+</plist>

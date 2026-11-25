@@ -1,0 +1,31 @@
+# Phase 2 job list for phase2_gpu0.sh (re-read after every job; first line without JOB_DONE runs next).
+# GRPO first (Enzo, Nov 21): the start's greedy E2, the GRPO LR grid, the data-breadth check.
+# Nov 22 (Enzo: "Yes, SFT first"): the SFT grids run first; they do not depend on the reward. The online runs are
+# held until the reward decision; Enzo dropped AOJ tests from the reward (Nov 22), so they run after the SFT grids, unchanged.
+e2 start_T0 runs/sft_full_seed0 0 1
+sft data/sft/references rl_refs 5e-6 2
+# Nov 23 (reward thread, Enzo approved): GRPO step-368 val temperature sweep, T 0 and 0.2 first, rest after the SFT grid
+e2 grpo_seed0_368_T0 runs/codenet_seed0/checkpoint-368 0 1
+e2 grpo_seed1_368_T0 runs/codenet_seed1/checkpoint-368 0 1
+e2 grpo_seed0_368_T0.2 runs/codenet_seed0/checkpoint-368 0.2 16
+e2 grpo_seed1_368_T0.2 runs/codenet_seed1/checkpoint-368 0.2 16
+sft data/sft/references rl_refs 1e-5 2
+sft data/sft/references rl_refs 2e-5 2
+sft data/sft/references rl_refs 5e-6 1
+sft data/sft/references rl_refs 1e-5 1
+sft data/sft/references rl_refs 2e-5 1
+sft data/sft/pool_references pool_refs 5e-6 1
+sft data/sft/pool_references pool_refs 1e-5 1
+sft data/sft/pool_references pool_refs 2e-5 1
+e2 grpo_seed0_368_T0.4 runs/codenet_seed0/checkpoint-368 0.4 16
+e2 grpo_seed1_368_T0.4 runs/codenet_seed1/checkpoint-368 0.4 16
+e2 grpo_seed0_368_T0.6 runs/codenet_seed0/checkpoint-368 0.6 16
+e2 grpo_seed1_368_T0.6 runs/codenet_seed1/checkpoint-368 0.6 16
+e2 grpo_seed0_368_T0.8 runs/codenet_seed0/checkpoint-368 0.8 16
+e2 grpo_seed1_368_T0.8 runs/codenet_seed1/checkpoint-368 0.8 16
+# HELD until Enzo confirms on campus (Nov 24): online grpo 5e-7 0 grpo_codenet.yaml 368 lr5e-7
+# HELD until Enzo confirms on campus (Nov 24): online grpo 2e-6 0 grpo_codenet.yaml 368 lr2e-6
+# HELD until Enzo confirms on campus (Nov 24): online grpo 1e-6 0 grpo_codenet_half.yaml 184 halfpool
+# HELD until Enzo confirms on campus (Nov 24): online grpo 1e-6 1 grpo_codenet_half.yaml 184 halfpool
+# HELD until Enzo confirms on campus (Nov 24): online rft 5e-7 0 grpo_codenet.yaml 368 lr5e-7
+# HELD until Enzo confirms on campus (Nov 24): online rft 2e-6 0 grpo_codenet.yaml 368 lr2e-6

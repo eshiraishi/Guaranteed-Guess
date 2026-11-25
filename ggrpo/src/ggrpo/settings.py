@@ -237,6 +237,9 @@ class Decoding(BaseModel):
     temperature: float | None = None   # sampling-only fields: unset when do_sample is false
     top_k: int | None = None
     top_p: float | None = None
+    # "offloaded" keeps the KV cache in host RAM: beam 8 at a 32,000-token budget needs ~7 GB of cache and OOMs a
+    # 16 GB card on the longest prompts
+    cache_implementation: str | None = None
 
 
 class Generate(BaseModel):

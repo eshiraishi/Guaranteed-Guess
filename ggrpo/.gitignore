@@ -3,3 +3,6 @@
 runs/
 data/train.jsonl
 data/eval.jsonl
+# Official tests and the tasks built from them: evaluation only, never redistributed (AOJ and Codeforces terms)
+data/contest/
+data/codeforces/

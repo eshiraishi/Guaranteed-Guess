@@ -275,6 +275,12 @@ official = "data/contest/aoj_eval.parquet"
 out = "results/codenet_val/gg_base_sample8.calibration.jsonl"
 workers = 6
 
+[score_samples]   # python -m ggrpo.score_samples (Mac): score ggrpo.sample rows written unscored on a GPU host
+samples = "results/codenet_val/e2/raw/start_T0_sample16.jsonl"
+url = "http://192.168.64.2:8765/score"
+batch = 128
+out = "results/codenet_val/e2/start_T0_sample16.jsonl"
+
 [official]   # python -m ggrpo.official: sample tests, then the official tests on AOJ and Codeforces problems (prereg.md §4)
 scored = "results/codenet_val/sft_full_11328_beam8.scored.jsonl"
 column = "completion"

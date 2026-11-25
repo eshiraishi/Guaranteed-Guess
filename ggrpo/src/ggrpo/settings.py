@@ -189,6 +189,16 @@ class Sample(BaseModel):
     score_batch: int           # completions per request to the reward server
     limit: int | None = None   # only the first this many tasks in the order (the fixed validation subset)
     stop_mixed: int | None = None   # stop once this many tasks have 0 < passes < samples (the census)
+    shard: str = "0"           # this process's name among the processes sharing out (one host)
+    score: bool = True         # False: write the completions unscored and score them later on the Mac (ggrpo.score_samples),
+                               # so a GPU never waits on the reward server (Nov 23: the off-campus tunnel outage)
+    out: Path
+
+
+class ScoreSamples(BaseModel):
+    samples: Path              # ggrpo.sample rows written with sample.score = false
+    url: HttpUrl               # the VM's /score as the Mac reaches it
+    batch: int                 # completions per request to the reward server
     out: Path
 
 
@@ -390,6 +400,7 @@ class Settings(BaseSettings):
     recheck: Recheck
     calibration: Calibration
     official: Official
+    score_samples: ScoreSamples
     x86: X86
     log: Log
     track: Track

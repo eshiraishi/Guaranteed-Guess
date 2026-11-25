@@ -11,14 +11,15 @@ import polars as pl
 import structlog
 from pydantic_settings import CliApp
 
+from ggrpo.sample import keep_prefix
 from ggrpo.settings import Settings
 
 log = structlog.get_logger("ggrpo")
 
 
 def select_pool(census: pl.DataFrame, cap: int) -> pl.DataFrame:
-    """task_id of the first cap tasks in census order with 0 < passes < their sample count."""
-    per_task = census.group_by("task_id").agg(rank=pl.col("rank").first(), n=pl.len(), passes=pl.col("passed").sum())
+    """task_id of the first cap tasks in census order with 0 < passes < their sample count, from its scored prefix."""
+    per_task = keep_prefix(census).group_by("task_id").agg(rank=pl.col("rank").first(), n=pl.len(), passes=pl.col("passed").sum())
     if per_task["n"].n_unique() != 1:
         raise ValueError(f"tasks have different sample counts: {sorted(per_task['n'].unique().to_list())}")
     mixed = per_task.filter((pl.col("passes") > 0) & (pl.col("passes") < pl.col("n"))).sort("rank")

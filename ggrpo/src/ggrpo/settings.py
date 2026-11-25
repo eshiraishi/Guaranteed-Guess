@@ -362,9 +362,22 @@ class BoardLane(BaseModel):
     host: str                 # a key of Board.hosts
     status: Path              # the append-only lane status file
     rows: Path | None = None  # the output the lane grows; None when the lane writes no rows
+    rows_extra: Path | None = None   # a second file the same progress goes to: the beam lanes re-generate every task
+                                     # that hit CUDA OOM into beam8_oom_<name>.jsonl, so for hours the rows file does
+                                     # not grow and the lane read STALLED while it was working (Nov 19). Counted
+                                     # together and de-duplicated, since the lane concatenates the two at the end.
     total: int = 0            # expected rows; 0 leaves the percentage and the ETA blank
     unit: str = "row"
     rows_per_unit: int = 1    # 16 completions per census task
+    stall_after_minutes: int | None = None   # overrides Board.stall_after_minutes: beam 8 writes a row every ~5 min
+                                             # on a hard problem, so the global 10 called a working lane STALLED
+    recovering_stall_after_minutes: int | None = None   # used instead of stall_after_minutes once the lane's last
+                                             # marker is RECOVER_START: the OOM recovery path keeps the KV cache in
+                                             # host RAM, which takes ~4 h for one task, so the 25 above called the
+                                             # working lane STALLED for hours (Nov 19).
+    rate_window_minutes: int | None = None   # overrides Board.rate_window_minutes: a lane that alternates generating
+                                             # a batch with scoring it needs a window over several of those cycles,
+                                             # or the rate reads 6.5 or 11.7 for the same true 8.2 (census, Nov 17)
 
 
 class BoardLocal(BaseModel):

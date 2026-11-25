@@ -472,6 +472,8 @@ rows = "runs/census/census.jsonl"
 total = 116448          # 7,278 RL tasks x 16 completions
 unit = "task"
 rows_per_unit = 16
+rate_window_minutes = 150   # this lane generates a 1024-completion batch with the GPU pinned, then scores it with the
+                            # GPU idle, so a 30-minute window read 6.5/min and 11.7/min for the same true 8.2 (Nov 17)
 
 [[board.lanes]]
 name = "sampled-11328"
@@ -487,14 +489,132 @@ status = "runs/codenet_val_11328/gpu1.status"
 rows = "runs/codenet_val_11328/beam8_gpu1.jsonl"
 total = 192
 
+[[board.lanes]]   # the GRPO step-184 checkpoint, same halves and same card as the two lanes above (Enzo, Nov 18)
+name = "grpo184-gpu1"
+host = "totoro"
+status = "runs/codenet_val_grpo184/gpu1.status"
+rows = "runs/codenet_val_grpo184/beam8_gpu1.jsonl"
+rows_extra = "runs/codenet_val_grpo184/beam8_oom_gpu1.jsonl"
+total = 192
+stall_after_minutes = 25   # as beam8-ponyo below: one hard problem can hold a row for over 10 minutes
+recovering_stall_after_minutes = 330   # ~4 h for one task with the KV cache in host RAM
+
+[[board.lanes]]
+name = "grpo184-ponyo"
+host = "ponyo"
+status = "runs/codenet_val_grpo184/ponyo.status"
+rows = "runs/codenet_val_grpo184/beam8_ponyo.jsonl"
+rows_extra = "runs/codenet_val_grpo184/beam8_oom_ponyo.jsonl"
+total = 191
+stall_after_minutes = 25
+recovering_stall_after_minutes = 330   # ~4 h for one task with the KV cache in host RAM
+
+[[board.lanes]]   # the finished run's step 368 -- the headline number (Enzo, Nov 18), chained behind the step-184
+                  # halves on the same two 4070s
+name = "grpo368-gpu1"
+host = "totoro"
+status = "runs/codenet_val_grpo368/gpu1.status"
+rows = "runs/codenet_val_grpo368/beam8_gpu1.jsonl"
+rows_extra = "runs/codenet_val_grpo368/beam8_oom_gpu1.jsonl"
+total = 192
+stall_after_minutes = 25
+recovering_stall_after_minutes = 330   # ~4 h for one task with the KV cache in host RAM
+
+[[board.lanes]]
+name = "grpo368-ponyo"
+host = "ponyo"
+status = "runs/codenet_val_grpo368/ponyo.status"
+rows = "runs/codenet_val_grpo368/beam8_ponyo.jsonl"
+rows_extra = "runs/codenet_val_grpo368/beam8_oom_ponyo.jsonl"
+total = 191
+stall_after_minutes = 25
+recovering_stall_after_minutes = 330   # ~4 h for one task with the KV cache in host RAM
+
 [[board.lanes]]
 name = "beam8-ponyo"
 host = "ponyo"
 status = "runs/codenet_val_11328/ponyo.status"
 rows = "runs/codenet_val_11328/beam8_ponyo.jsonl"
 total = 191
+stall_after_minutes = 25   # beam 8 on a hard problem can hold a row for over 10 minutes: the global threshold called
+                           # this lane STALLED on Nov 17 while it was working at 0.2 rows/min
 
 [[board.lanes]]
 name = "probe"
 host = "totoro"
 status = "runs/probe_after_census.status"
+
+[[board.lanes]]   # the two holes in the SFT curve, filled on GPU1 once the 11328 eval freed it (Nov 17)
+name = "sampled-9064"
+host = "totoro"
+status = "runs/codenet_val_sft_full_9064.status"
+rows = "runs/sft_full_9064_codenet_val_sample8.jsonl"
+total = 3064
+
+[[board.lanes]]
+name = "sampled-10197"
+host = "totoro"
+status = "runs/codenet_val_sft_full_10197.status"
+rows = "runs/sft_full_10197_codenet_val_sample8.jsonl"
+total = 3064
+
+[[board.lanes]]   # the single GRPO run (Enzo, Nov 18): ggrpo.record appends 128 rollout rows per update
+name = "grpo-codenet"
+host = "totoro"
+status = "runs/codenet_seed0.status"
+rows = "runs/codenet_seed0/rollouts.jsonl"
+total = 47104          # 368 steps x 16 prompts x 8 completions: pass 2 appends to the same rollouts file, so the
+                       # pass-1 figure of 23552 made the lane read 110% once the second pass was under way (Nov 18)
+unit = "step"
+rows_per_unit = 128
+stall_after_minutes = 45    # a step was 1,172 s on the probe's worst batch, and rows land in one burst per step, so the
+                            # global 10 would call every normal step a stall
+rate_window_minutes = 120
+
+[[board.lanes]]   # the chained second pass (Enzo, Nov 18): waits for GRPO_EXIT 0, then resumes to step 368
+name = "grpo-pass2"
+host = "totoro"
+status = "runs/codenet_seed0_pass2.status"
+
+[[board.lanes]]   # the confirmatory second seed (Enzo, Nov 19: "Yes, start it"), same recipe and same two passes as
+                  # seed 0, so the same rollout arithmetic applies
+name = "grpo-seed1"
+host = "totoro"
+status = "runs/codenet_seed1.status"
+rows = "runs/codenet_seed1/rollouts.jsonl"
+total = 47104
+unit = "step"
+rows_per_unit = 128
+
+[[board.lanes]]
+name = "grpo-seed1-pass2"
+host = "totoro"
+status = "runs/codenet_seed1_pass2.status"
+
+[[board.lanes]]   # the LR grid's prereg E2, 16 samples x 383 tasks per arm on GPU1 alone (Enzo, Nov 19: "16, as
+                  # prereg"); one E2_EXIT per arm, then E2_DONE
+name = "e2-lr-grid"
+host = "totoro"
+status = "runs/e2_pool_refs.status"
+
+[[board.lanes]]   # the same arms' beam-8 halves on ponyo, which has no vLLM and so cannot take part in E2
+name = "e1-lr-ponyo"
+host = "ponyo"
+status = "runs/e1_pool_refs.status"
+
+[[board.lanes]]   # the imitation arm's LR grid (Enzo, Nov 18), chained behind the control; three runs in one lane,
+                  # so the status file is the progress: one ARM_EXIT per LR, then GRID_EXIT
+name = "sft-pool-refs"
+host = "totoro"
+status = "runs/sft_pool_references.status"
+
+[[board.lanes]]   # the permuted-reward control (Enzo, Nov 18), chained behind the second pass
+name = "grpo-random"
+host = "totoro"
+status = "runs/codenet_random_seed0.status"
+rows = "runs/codenet_random_seed0/rollouts.jsonl"
+total = 23552
+unit = "step"
+rows_per_unit = 128
+stall_after_minutes = 45
+rate_window_minutes = 120

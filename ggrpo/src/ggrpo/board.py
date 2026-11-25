@@ -21,7 +21,19 @@ from pathlib import Path
 from ggrpo.settings import Board, BoardLane, Settings
 
 # a lane whose last status line starts with one of these has stopped; anything else is still working
-DONE_PREFIXES = ("LANE_DONE", "SHARD_EXIT", "SAMPLED_DONE", "PROBE_EXIT", "EXIT", "FAILED", "CENSUS_FAILED")
+DONE_PREFIXES = ("LANE_DONE", "SHARD_EXIT", "SAMPLED_DONE", "PROBE_EXIT", "EXIT", "DONE", "FAILED",
+                 "STOPPED",      # STOPPED is written by hand when a lane is killed, so the board stops calling it
+                                 # running; a restart appends START after it
+                 "GRPO_EXIT", "PASS2_EXIT", "RANDOM_EXIT", "GRID_EXIT", "GRID_ABORT", "SFT_EXIT", "FULL_EXIT",
+                 "SHORT", "HASH_MISMATCH", "KILLED", "REFUSED")
+# Nov 18: the training lanes spell their own exit marker, so "EXIT" as a prefix never matched GRPO_EXIT 0 and the
+# finished run read STALLED. Every "<step>_FAILED" marker is terminal too, and there are a dozen of them; ARM_EXIT is
+# deliberately absent, since the LR grid writes one per arm and goes on to the next.
+# A marker ending in DONE is not enough on its own: RECOVER_DONE, GEN_DONE, SCORE_DONE and COPY_DONE are all mid-lane.
+
+
+def has_stopped(last: str) -> bool:
+    return last.startswith(DONE_PREFIXES) or last.split(" ")[0].endswith("_FAILED")
 
 
 def build_remote_script(board: Board, host: str) -> str:
@@ -31,7 +43,8 @@ def build_remote_script(board: Board, host: str) -> str:
         if lane.host != host:
             continue
         repo = board.hosts[host].repo
-        count = f"wc -l < {repo / lane.rows} 2>/dev/null | tr -d ' '" if lane.rows else "echo -1"
+        files = " ".join(str(repo / f) for f in (lane.rows, lane.rows_extra) if f)
+        count = f"cat {files} 2>/dev/null | sort -u | wc -l | tr -d ' '" if lane.rows else "echo -1"
         parts.append(f'printf "%s\\t%s\\t%s\\n" "{lane.name}" "$({count} || echo -1)" '
                      f'"$(tail -1 {repo / lane.status} 2>/dev/null)"')
     parts.append('printf "GPU\\t%s\\t-\\n" '
@@ -83,12 +96,29 @@ def measure_rate(history, lane: str, now: datetime, count: int, window: timedelt
     return (count - oldest_count) / minutes if minutes >= 1 else None
 
 
-def measure_stall(history, lane: str, now: datetime, count: int, after: timedelta) -> timedelta | None:
-    """How long the row count has been frozen, once that passes the threshold."""
+def read_status_time(last: str) -> datetime | None:
+    """The ISO-8601 UTC stamp a lane status line ends with, which every lane script writes."""
+    for word in reversed(last.split()):
+        try:
+            return datetime.fromisoformat(word.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+    return None
+
+
+def measure_stall(history, lane: str, now: datetime, count: int, after: timedelta,
+                  since: datetime | None) -> timedelta | None:
+    """How long the row count has been frozen, once that passes the threshold.
+
+    Frozen time is counted from the lane's own last status line, never from before it: a lane stopped and restarted
+    has an unchanged row count across the gap, and counting that gap called a freshly restarted 9064 eval STALLED for
+    2 h 14 (Nov 17). The restart's START line is the honest zero.
+    """
     held = [when for when, name, rows in history if name == lane and rows == count]
     if not held:
         return None
-    waited = now - min(held)
+    started = max([min(held)] + ([since] if since else []))
+    waited = now - started
     return waited if waited >= after else None
 
 
@@ -108,15 +138,28 @@ def describe_local(board: Board) -> list[str]:
 def describe_lane(board: Board, lane: BoardLane, polled: dict, history, now: datetime) -> str:
     rows, _gpu, error = polled[lane.host]
     if error:
-        return f"{lane.name:<15}{'?':<10}{lane.host} unreachable: {error}"
+        return f"{lane.name:<17}{'?':<10}{lane.host} unreachable: {error}"
     count, last = rows.get(lane.name, (-1, ""))
-    state = "done" if last.startswith(DONE_PREFIXES) else ("waiting" if last.startswith("WAIT") else "running")
+    if not last:
+        state = "queued"        # no status file yet: a lane still behind another in its chain
+    elif has_stopped(last):
+        state = "done"
+    elif last.startswith("WAIT"):
+        state = "waiting"
+    else:
+        state = "running"
     if count < 0:
-        return f"{lane.name:<15}{state:<10}{last or 'no output yet'}"
-    stalled = measure_stall(history, lane.name, now, count, timedelta(minutes=board.stall_after_minutes))
-    if stalled and state == "running":
+        return f"{lane.name:<17}{state:<10}{last or 'no output yet'}"
+    recovering = last.startswith("RECOVER_START")
+    minutes = (lane.recovering_stall_after_minutes if recovering and lane.recovering_stall_after_minutes
+               else lane.stall_after_minutes or board.stall_after_minutes)
+    after = timedelta(minutes=minutes)
+    stalled = (measure_stall(history, lane.name, now, count, after, read_status_time(last))
+               if state == "running" else None)
+    if stalled:
         state = "STALLED"
-    rate = measure_rate(history, lane.name, now, count, timedelta(minutes=board.rate_window_minutes))
+    window = timedelta(minutes=lane.rate_window_minutes or board.rate_window_minutes)
+    rate = measure_rate(history, lane.name, now, count, window)
     progress = f"{count // lane.rows_per_unit} / {lane.total // lane.rows_per_unit} {lane.unit}"
     if lane.total:
         progress += f" {100 * count / lane.total:.0f}%"
@@ -131,14 +174,14 @@ def describe_lane(board: Board, lane: BoardLane, polled: dict, history, now: dat
         when = now + timedelta(minutes=(lane.total - count) / rate)
         local = when.astimezone(timezone(timedelta(hours=board.report_utc_offset_hours)))
         eta = f"{when.strftime('%d %H:%M')}Z / {local.strftime('%d %H:%M')}"
-    return f"{lane.name:<15}{state:<10}{progress:<24}{shown:<15}{eta}"
+    return f"{lane.name:<17}{state:<10}{progress:<24}{shown:<15}{eta}"
 
 
 def render(board: Board, now: datetime, polled: dict, history) -> str:
     local = now.astimezone(timezone(timedelta(hours=board.report_utc_offset_hours)))
     out = [f"{now.strftime('%d %b %H:%M')}Z / {local.strftime('%H:%M')} local", ""]
     out += describe_local(board)
-    out += ["", f"{'LANE':<15}{'STATE':<10}{'PROGRESS':<24}{'RATE':<15}ETA (UTC / local)"]
+    out += ["", f"{'LANE':<17}{'STATE':<10}{'PROGRESS':<24}{'RATE':<15}ETA (UTC / local)"]
     out += [describe_lane(board, lane, polled, history, now) for lane in board.lanes]
     out.append("")
     for host in board.hosts:
